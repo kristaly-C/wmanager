@@ -12,6 +12,30 @@ datasource db {
   provider = "postgresql"
 }
 
+
+enum LocationType {
+  WAREHOUSE
+  STORE
+  ZONE
+  SHELF
+}
+enum SlotMode {
+  DEDICATED
+  MIXED
+}
+enum PurchaseOrderStatus {
+  PENDING
+  RECEIVED
+  CANCELLED
+}
+enum StockTransferStatus {
+  PENDING
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+}
+
+
 model Category {
   id String @id @default(uuid())
   name String
@@ -36,7 +60,7 @@ model Product {
    model String
    manufacturerCode String
    functionality String?
-
+   variants Variant[]
    vatRate Decimal
   
    primarySupplierId String
@@ -62,6 +86,95 @@ model Supplier {
   email String?
   products Product[]
 
+  purchaseOrders PurchaseOrder[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt 
+}
+
+model Variant {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+
+  sku    String
+  colors String[]
+  size   String
+  weight Decimal
+  
+  stockItems  StockItem[]
+
+  price     Decimal
+  costPrice Decimal
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Location {
+  id          String  @id @default(uuid())
+  parentId    String?
+  parent      Location? @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children    Location[] @relation("LocationHierarchy")
+  
+  name        String
+  description String
+  type        LocationType
+  
+  stockItems  StockItem[]
+  transfersFrom StockTransfer[] @relation("TransferFrom")
+  transfersTo   StockTransfer[] @relation("TransferTo")
+
+  isActive    Boolean @default(true)
+  slotMode    SlotMode?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StockItem {
+  id          String @id @default(uuid())
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id])
+  variantId   String
+  variant     Variant @relation(fields: [variantId], references: [id])
+  
+  quantity    Int       @default(0)
+  reservedQuantity  Int @default(0)
+
+  minStockLevel Int?
+  maxStockLevel Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([variantId, locationId])
+}
+
+model PurchaseOrder {
+  id         String   @id @default(uuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  status     PurchaseOrderStatus @default(PENDING)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+
+model StockTransfer {
+  id             String   @id @default(uuid())
+
+  fromLocationId String
+  fromLocation   Location @relation("TransferFrom", fields: [fromLocationId], references: [id])
+
+  toLocationId   String
+  toLocation     Location @relation("TransferTo", fields: [toLocationId], references: [id])
+
+  status         StockTransferStatus
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

@@ -36,15 +36,12 @@ export interface Variant {
     productId: string;
 
     sku: string;
-    color: string;
+    colors: string[];
     size: string;
     weight: number;
 
     price: number;
     costPrice: number;
-
-    minStockLevel: number;
-    maxStockLevel: number;
 
     isActive: boolean;
     createdAt: string;
@@ -72,8 +69,13 @@ export interface StockItem {
     id: string;
     locationId: string;
     variantId: string;
+
     quantity: number;
     reservedQuantity: number;
+
+    minStockLevel?: number;
+    maxStockLevel?: number;
+
     createdAt: string;
     updatedAt: string;
 }
