@@ -34,7 +34,34 @@ enum StockTransferStatus {
   COMPLETED
   CANCELLED
 }
+enum StocktakeStatus {
+  IN_PROGRESS
+  WAITING_FOR_APPROVAL
+  COMPLETED
+  CANCELLED
+}
+enum Role {
+  ADMIN
+  STORE_MANAGER
+  WAREHOUSE_MANAGER
+  WAREHOUSE_STAFF
+  STORE_STAFF
+  ORDER_CLERK
+  RMA_CLERK
+}
 
+model User {
+  id    String @id @default(uuid())
+  email String @unique
+  name  String
+  role  Role
+
+  stocktakeSessions StocktakeSession[]
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 
 model Category {
   id String @id @default(uuid())
@@ -125,6 +152,7 @@ model Location {
   stockItems  StockItem[]
   transfersFrom StockTransfer[] @relation("TransferFrom")
   transfersTo   StockTransfer[] @relation("TransferTo")
+  stocktakeSessions StocktakeSession[]
 
   isActive    Boolean @default(true)
   slotMode    SlotMode?
@@ -174,6 +202,22 @@ model StockTransfer {
   toLocation     Location @relation("TransferTo", fields: [toLocationId], references: [id])
 
   status         StockTransferStatus
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StocktakeSession {
+  id        String @id @default(uuid())
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id])
+  status      StocktakeStatus @default(IN_PROGRESS)
+
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  
+  performedByUserId   String
+  performedBy         User @relation(fields: [performedByUserId], references: [id])
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
