@@ -1,4 +1,4 @@
-import { LocationType, MovementType, SlotMode } from "./enums";
+import { LocationType, MovementType, SlotMode, Role, PurchaseOrderStatus, StockTransferStatus, StocktakeStatus, ReturnCaseStatus, SalesOrderStatus } from "./enums";
 
 export interface Product {
     id: string;
@@ -13,12 +13,11 @@ export interface Product {
 
     vatRate: number;
 
-    primarySupplier: string;
+    primarySupplierId: string;
     imageUrls: string[];
     attributes: Record<string, string>;
 
     categoryId: string;
-    categoryName: string;
 
     isActive: boolean;
     createdAt: string;
@@ -26,6 +25,34 @@ export interface Product {
 
 
 }
+export interface Supplier {
+    id: string;
+    name: string;
+    description?: string;
+    phone?: string;
+    email?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+export interface Category {
+    id: string;
+    name: string;
+    parentId?: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface User {
+    id: string;
+    email: string;
+    name: string;
+    role: Role;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
 
 export interface ProductWithVariants extends Product {
     variants: Variant[];
@@ -60,9 +87,10 @@ export interface VariantBarcode {
 
     barcode: string;
     isPrimary: boolean;
-    note: string;
+    note?: string;
 
     createdAt: string;
+    updatedAt: string;
 }
 
 export interface StockItem {
@@ -109,4 +137,61 @@ export interface StockMovement {
     note?: string;
     createdByUserId: string;
     createdAt: string;
+}
+
+export interface PurchaseOrder {
+    id: string;
+    supplierId: string;
+    status: PurchaseOrderStatus;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface StockTransfer {
+    id: string;
+    fromLocationId: string;
+    toLocationId: string;
+    status: StockTransferStatus;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface StocktakeSession {
+    id: string;
+    locationId: string;
+    status: StocktakeStatus;
+    startedAt: string;
+    completedAt?: string;
+    performedByUserId: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ReturnCase {
+    id: string;
+    handledByUserId: string;
+    status: ReturnCaseStatus;
+    returnReason: string;
+    resultNote?: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    orderReference?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ReturnCaseItem {
+    id: string;
+    returnCaseId: string;
+    variantId: string;
+    quantity: number;
+    createdAt: string;
+}
+
+export interface SalesOrder {
+    id: string;
+    status: SalesOrderStatus;
+    createdAt: string;
+    updatedAt: string;
 }

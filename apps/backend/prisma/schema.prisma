@@ -49,6 +49,27 @@ enum Role {
   ORDER_CLERK
   RMA_CLERK
 }
+enum ReturnCaseStatus {
+  CREATED
+  IN_PROGRESS
+  APPROVED
+  DECLINED
+}
+enum SalesOrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum MovementType {
+  PURCHASE_RECEIPT
+  SALE
+  TRANSFER_IN
+  TRANSFER_OUT
+  STOCKTAKE_ADJUSTMENT
+  RETURN_RESTOCK
+  MANUAL_CORRECTION
+}
 
 model User {
   id    String @id @default(uuid())
@@ -57,6 +78,8 @@ model User {
   role  Role
 
   stocktakeSessions StocktakeSession[]
+  returnCases ReturnCase[]
+  stockMovements StockMovement[]
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -130,6 +153,9 @@ model Variant {
   weight Decimal
   
   stockItems  StockItem[]
+  returnCaseItems ReturnCaseItem[]
+  stockMovements StockMovement[]
+  variantBarcodes VariantBarcode[]
 
   price     Decimal
   costPrice Decimal
@@ -150,6 +176,7 @@ model Location {
   type        LocationType
   
   stockItems  StockItem[]
+  stockMovements StockMovement[]
   transfersFrom StockTransfer[] @relation("TransferFrom")
   transfersTo   StockTransfer[] @relation("TransferTo")
   stocktakeSessions StocktakeSession[]
@@ -187,6 +214,8 @@ model PurchaseOrder {
 
   status     PurchaseOrderStatus @default(PENDING)
 
+  stockMovements StockMovement[]
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
@@ -202,6 +231,7 @@ model StockTransfer {
   toLocation     Location @relation("TransferTo", fields: [toLocationId], references: [id])
 
   status         StockTransferStatus
+  stockMovements StockMovement[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -218,7 +248,94 @@ model StocktakeSession {
   
   performedByUserId   String
   performedBy         User @relation(fields: [performedByUserId], references: [id])
+  stockMovements    StockMovement[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+
+model ReturnCase {
+  id        String @id @default(uuid())
+
+  handledByUserId String
+  handledByUser   User @relation(fields: [handledByUserId], references: [id])
+
+  items ReturnCaseItem[]
+  stockMovements StockMovement[]
+  status       ReturnCaseStatus @default(CREATED)
+  returnReason String
+  resultNote   String?
+
+  customerName   String?
+  customerEmail  String?
+  customerPhone  String?
+  orderReference String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ReturnCaseItem {
+  id           String @id @default(uuid())
+
+  returnCaseId String
+  returnCase   ReturnCase @relation(fields: [returnCaseId], references: [id])
+
+  variantId    String
+  variant      Variant @relation(fields: [variantId], references: [id])
+
+  quantity     Int
+
+  createdAt    DateTime @default(now())
+}
+
+model SalesOrder {
+  id     String @id @default(uuid())
+  status SalesOrderStatus @default(PENDING)
+
+  stockMovements StockMovement[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StockMovement {
+  id                  String  @id @default(uuid())
+
+  purchaseOrderId     String?
+  purchaseOrder       PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  salesOrderId        String?
+  salesOrder          SalesOrder? @relation(fields: [salesOrderId],references: [id])
+  stocktakeSessionId  String?
+  stocktakeSession    StocktakeSession? @relation(fields: [stocktakeSessionId], references: [id])
+  stockTransferId     String?
+  stockTransfer       StockTransfer? @relation(fields: [stockTransferId], references: [id])
+  returnCaseId        String?
+  returnCase          ReturnCase? @relation(fields: [returnCaseId], references: [id])
+
+  type                MovementType
+  variantId           String
+  variant             Variant @relation(fields: [variantId], references: [id])
+  locationId          String
+  location            Location @relation(fields: [locationId], references: [id])
+  quantity            Int
+  note                String?
+  
+  createdByUserId     String
+  createdByUser       User  @relation(fields: [createdByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+
+}
+
+model VariantBarcode {
+  id        String @id @default(uuid())
+  variantId String
+  variant   Variant @relation(fields: [variantId], references: [id])
+  barcode   String @unique
+  isPrimary Boolean @default(false)
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
