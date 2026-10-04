@@ -48,6 +48,7 @@ export interface User {
     email: string;
     name: string;
     role: Role;
+    passwordHash: string;
     isActive: boolean;
     createdAt: string;
     updatedAt: string;
