@@ -105,7 +105,6 @@ model Category {
 model Product {
    id String @id @default(uuid())
    name String
-   brand String
    gender String
    usageArea String?
    material String?
@@ -120,6 +119,9 @@ model Product {
    imageUrls String[]
 
    attributes Json?
+
+   brandId String
+   brand Brand @relation(fields: [brandId], references: [id])
 
    categoryId String
    category Category @relation(fields: [categoryId], references: [id])
@@ -337,6 +339,17 @@ model VariantBarcode {
   barcode   String @unique
   isPrimary Boolean @default(false)
   note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Brand {
+  id    String  @id @default(uuid())
+  name  String
+  description String?
+
+  products Product[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -65,7 +65,8 @@ export const ModelName = {
   ReturnCaseItem: 'ReturnCaseItem',
   SalesOrder: 'SalesOrder',
   StockMovement: 'StockMovement',
-  VariantBarcode: 'VariantBarcode'
+  VariantBarcode: 'VariantBarcode',
+  Brand: 'Brand'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -112,7 +113,6 @@ export type CategoryScalarFieldEnum = (typeof CategoryScalarFieldEnum)[keyof typ
 export const ProductScalarFieldEnum = {
   id: 'id',
   name: 'name',
-  brand: 'brand',
   gender: 'gender',
   usageArea: 'usageArea',
   material: 'material',
@@ -123,6 +123,7 @@ export const ProductScalarFieldEnum = {
   primarySupplierId: 'primarySupplierId',
   imageUrls: 'imageUrls',
   attributes: 'attributes',
+  brandId: 'brandId',
   categoryId: 'categoryId',
   isActive: 'isActive',
   createdAt: 'createdAt',
@@ -297,6 +298,17 @@ export const VariantBarcodeScalarFieldEnum = {
 } as const
 
 export type VariantBarcodeScalarFieldEnum = (typeof VariantBarcodeScalarFieldEnum)[keyof typeof VariantBarcodeScalarFieldEnum]
+
+
+export const BrandScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  description: 'description',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type BrandScalarFieldEnum = (typeof BrandScalarFieldEnum)[keyof typeof BrandScalarFieldEnum]
 
 
 export const SortOrder = {
