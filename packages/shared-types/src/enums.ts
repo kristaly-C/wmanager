@@ -29,3 +29,31 @@ export enum LocationType {
     RETURN_RESTOCK = 'RETURN_RESTOCK',           // visszavétel, visszakerül készletre
     MANUAL_CORRECTION = 'MANUAL_CORRECTION',     // kézi javítás (pl. sérült áru leírása)
   }
+  export enum PurchaseOrderStatus {
+    PENDING = 'PENDING',
+    RECEIVED = 'RECEIVED',
+    CANCELLED = 'CANCELLED',
+  }
+  export enum StockTransferStatus {
+    PENDING = 'PENDING',
+    IN_TRANSIT = 'IN_TRANSIT',
+    COMPLETED = 'COMPLETED',
+    CANCELLED = 'CANCELLED',
+  }
+  export enum StocktakeStatus {
+    IN_PROGRESS = 'IN_PROGRESS',
+    WAITING_FOR_APPROVAL = 'WAITING_FOR_APPROVAL',
+    COMPLETED = 'COMPLETED',
+    CANCELLED = 'CANCELLED',
+  }
+  export enum ReturnCaseStatus {
+    CREATED = 'CREATED',
+    IN_PROGRESS = 'IN_PROGRESS',
+    APPROVED = 'APPROVED',
+    DECLINED = 'DECLINED',
+  }
+  export enum SalesOrderStatus {
+    PENDING = 'PENDING',
+    COMPLETED = 'COMPLETED',
+    CANCELLED = 'CANCELLED',
+  }
