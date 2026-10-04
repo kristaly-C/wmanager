@@ -92,3 +92,8 @@ export type StockMovement = Prisma.StockMovementModel
  * 
  */
 export type VariantBarcode = Prisma.VariantBarcodeModel
+/**
+ * Model Brand
+ * 
+ */
+export type Brand = Prisma.BrandModel

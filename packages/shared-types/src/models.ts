@@ -3,7 +3,7 @@ import { LocationType, MovementType, SlotMode, Role, PurchaseOrderStatus, StockT
 export interface Product {
     id: string;
     name: string;
-    brand: string;
+    brandId: string;
     gender: string;
     usageArea: string;
     material: string;
@@ -192,6 +192,15 @@ export interface ReturnCaseItem {
 export interface SalesOrder {
     id: string;
     status: SalesOrderStatus;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface Brand  {
+    id: string;
+    name: string;
+    description?: string;
+
     createdAt: string;
     updatedAt: string;
 }
