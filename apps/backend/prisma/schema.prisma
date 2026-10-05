@@ -50,6 +50,7 @@ enum Role {
   STORE_STAFF
   ORDER_CLERK
   RMA_CLERK
+  BOSS
 }
 enum ReturnCaseStatus {
   CREATED

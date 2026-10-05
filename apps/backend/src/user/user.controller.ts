@@ -3,6 +3,9 @@ import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../generated/prisma/enums';
 
 
 @Controller('users')
@@ -20,6 +23,8 @@ export class UserController {
         return this.userService.findOne(id);
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.BOSS)
     @Post()
     create(@Body() data: CreateUserDto) {
         return this.userService.createUser(data);
@@ -30,6 +35,9 @@ export class UserController {
         return this.userService.update(id, UpdateUserDto);
     }
 
+
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN)
     @Delete(':id')
     remove(@Param('id') id: string){
         return this.userService.remove(id);
