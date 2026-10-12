@@ -18,6 +18,8 @@ export class UserController {
         return this.userService.findAll();
     }
 
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.BOSS, Role.STORE_MANAGER, Role.WAREHOUSE_MANAGER)
     @Get(':id')
     findOne(@Param('id') id: string) {
         return this.userService.findOne(id);
@@ -29,10 +31,11 @@ export class UserController {
     create(@Body() data: CreateUserDto) {
         return this.userService.createUser(data);
     }
-
+    @UseGuards(JwtAuthGuard,RolesGuard)
+    @Roles(Role.ADMIN, Role.BOSS)
     @Patch(':id')
     update(@Param('id') id: string, @Body() data: UpdateUserDto) {
-        return this.userService.update(id, UpdateUserDto);
+        return this.userService.update(id, data);
     }
 
 
