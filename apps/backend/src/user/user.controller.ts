@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../generated/prisma/enums';
+import { AuthUser, CurrentUser } from '../auth/decorators/current-user.decorator';
 
 
 @Controller('users')
@@ -28,21 +29,21 @@ export class UserController {
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(Role.ADMIN, Role.BOSS)
     @Post()
-    create(@Body() data: CreateUserDto) {
-        return this.userService.createUser(data);
+    create(@Body() data: CreateUserDto, @CurrentUser() actor: AuthUser) {
+        return this.userService.createUser(data, actor);
     }
     @UseGuards(JwtAuthGuard,RolesGuard)
     @Roles(Role.ADMIN, Role.BOSS)
     @Patch(':id')
     update(@Param('id') id: string, @Body() data: UpdateUserDto) {
-        return this.userService.update(id, data);
+        return this.userService.updateUser(id, data);
     }
 
 
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(Role.ADMIN)
+    @Roles(Role.ADMIN, Role.BOSS)
     @Delete(':id')
-    remove(@Param('id') id: string){
-        return this.userService.remove(id);
+    remove(@Param('id') id: string, @CurrentUser() actor: AuthUser){
+        return this.userService.removeUser(id, actor);
     }
 }

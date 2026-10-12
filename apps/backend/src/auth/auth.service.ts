@@ -17,7 +17,7 @@ export class AuthService {
             where: { email: data.email}
         });
 
-        if (!user) {
+        if (!user || !user.isActive) {
             throw new UnauthorizedException('Invalid credentials');
         }
 
