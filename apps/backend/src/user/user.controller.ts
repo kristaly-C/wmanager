@@ -32,6 +32,8 @@ export class UserController {
     create(@Body() data: CreateUserDto, @CurrentUser() actor: AuthUser) {
         return this.userService.createUser(data, actor);
     }
+
+    
     @UseGuards(JwtAuthGuard,RolesGuard)
     @Roles(Role.ADMIN, Role.BOSS)
     @Patch(':id')
