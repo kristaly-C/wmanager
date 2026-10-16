@@ -18,7 +18,7 @@ export class SupplierController {
         return this.supplierService.findAll();
     }
     
-    @Roles(Role.ADMIN, Role.BOSS)
+    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER)
     @Post()
     create(@Body() CreateSupplierDto: CreateSupplierDto) {
         return this.supplierService.create(CreateSupplierDto);

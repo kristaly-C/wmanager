@@ -28,7 +28,7 @@ export class ProductController {
     findOne(@Param('id') id: string) {
         return this.productService.findOne(id);
     }
-    @Roles(Role.ADMIN,Role.BOSS,Role.WAREHOUSE_MANAGER, Role.WAREHOUSE_STAFF)
+    @Roles(Role.ADMIN,Role.BOSS,Role.WAREHOUSE_MANAGER)
     @Patch(':id')
     update(@Param('id') id: string, @Body() UpdateProductDto: UpdateProductDto) {
         return this.productService.update(id, UpdateProductDto);

@@ -16,7 +16,7 @@ export class UserService extends BaseService<PrismaService['user']> {
   }
 
   async createUser(data: CreateUserDto, actor: AuthUser) {
-    this.asserCanManage(actor, data.role)
+    this.assertCanManage(actor, data.role)
     const passwordHash = await bcrypt.hash(data.password, 10);
     const { password, ...rest } = data;
 
@@ -37,7 +37,7 @@ export class UserService extends BaseService<PrismaService['user']> {
 
   async removeUser(id: string, actor: AuthUser) {
     const pickedUser = await this.findOne(id);
-    this.asserCanManage(actor, pickedUser.role);
+    this.assertCanManage(actor, pickedUser.role);
     if(pickedUser.role === 'ADMIN'){
       const numberOfAdmins = await this.prisma.user.count({where: {role: 'ADMIN'}});
       if(numberOfAdmins < 2){
@@ -52,7 +52,18 @@ export class UserService extends BaseService<PrismaService['user']> {
   }
 
 
-  async updateUser(id:string, data: UpdateUserDto){
+  async updateUser(id: string, data: UpdateUserDto, actor: AuthUser){
+    const target = await this.findOne(id);
+
+    this.assertCanManage(actor, target.role);
+    
+    if(data.role){
+      this.assertCanManage(actor, data.role);
+    }
+
+    if (target.role === Role.BOSS && data.role && data.role !== Role.BOSS) {
+      throw new ConflictException('Cannot change the role of a BOSS');
+  }
     const updated = await super.update(id, data);
     return this.excludePassword(updated);
   }
@@ -62,7 +73,7 @@ export class UserService extends BaseService<PrismaService['user']> {
     return rest;
   }
 
-  private asserCanManage(actor: AuthUser, targetRole: Role){
+  private assertCanManage(actor: AuthUser, targetRole: Role){
     const protectedRoles: Role[] = [Role.ADMIN, Role.BOSS];
     if (protectedRoles.includes(targetRole) && actor.role !== Role.BOSS) {
       throw new ForbiddenException('Only a BOSS can manage ADMIN and BOSS accounts');

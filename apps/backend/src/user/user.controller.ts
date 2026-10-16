@@ -37,8 +37,8 @@ export class UserController {
     @UseGuards(JwtAuthGuard,RolesGuard)
     @Roles(Role.ADMIN, Role.BOSS)
     @Patch(':id')
-    update(@Param('id') id: string, @Body() data: UpdateUserDto) {
-        return this.userService.updateUser(id, data);
+    update(@Param('id') id: string, @Body() data: UpdateUserDto, @CurrentUser() actor: AuthUser) {
+        return this.userService.updateUser(id, data, actor);
     }
 
 
