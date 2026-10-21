@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsNumber, IsObject, IsOptional, IsString, IsUUID, MinLength } from "class-validator";
+import { IsArray, IsBoolean, IsNumber, IsObject, IsOptional, IsString, IsUUID, Min, MinLength } from "class-validator";
 
 
 export class CreateVariantDto{
@@ -16,10 +16,11 @@ export class CreateVariantDto{
 
     @IsString()
     size!: string;
-
+    @Min(0)
     @IsNumber()
     weight!: number;
 
+    @Min(0)
     @IsNumber()
     price!: number;
 
@@ -30,10 +31,4 @@ export class CreateVariantDto{
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
-
-    @IsString()
-    createdAt!: string;
-
-    @IsString()
-    updatedAt!: string;
 }
