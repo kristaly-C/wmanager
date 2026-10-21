@@ -1,4 +1,4 @@
-import { Body, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
 import { VariantService } from "./variant.service";
 import { CreateVariantDto } from "./dto/create-variant.dto";
 import { UpdateVariantDto } from "./dto/update-variant.dto";
@@ -6,7 +6,7 @@ import { UpdateVariantDto } from "./dto/update-variant.dto";
 
 
 
-
+@Controller()
 export class VariantController {
     constructor(private variantService: VariantService) {}
 
