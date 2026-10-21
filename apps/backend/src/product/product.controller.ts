@@ -20,8 +20,8 @@ export class ProductController {
 
     @Roles(Role.ADMIN,Role.BOSS,Role.WAREHOUSE_MANAGER)
     @Post()
-    create(@Body() CreateProductDto: CreateProductDto) {
-        return this.productService.create(CreateProductDto);
+    create(@Body() createProductDto: CreateProductDto) {
+        return this.productService.create(createProductDto);
     }
 
     @Get(':id')
