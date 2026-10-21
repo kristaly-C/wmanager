@@ -1,3 +1,5 @@
+import router from '@/router'
+import { useAuthStore } from '@/stores/auth'
 import axios from 'axios'
 
 const apiClient = axios.create({
@@ -15,9 +17,23 @@ apiClient.interceptors.request.use(
         }
         return config
     },
+    (error) => Promise.reject(error)
+)
+
+apiClient.interceptors.response.use(
+    (response) => response,
     (error) => {
+        const isLoginRequest = error.config?.url?.includes('/auth/login')
+
+        if(error.response?.status === 401 && !isLoginRequest) {
+            const authStore = useAuthStore()
+            authStore.logout()
+            router.push({name: 'login'})
+        }
+
         return Promise.reject(error)
     }
 )
+
 
 export default apiClient
