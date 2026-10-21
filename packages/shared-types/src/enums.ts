@@ -11,6 +11,7 @@ export enum Role {
     STORE_STAFF = 'STORE_STAFF',
     ORDER_CLERK = 'ORDER_CLERK',
     RMA_CLERK = 'RMA_CLERK',
+    BOSS = 'BOSS',
 }
 
 export enum LocationType {
