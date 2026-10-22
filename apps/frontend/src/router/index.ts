@@ -1,6 +1,10 @@
+import MainLayout from '@/layouts/MainLayout.vue'
+import PdaLayout from '@/layouts/PdaLayout.vue'
 import { useAuthStore } from '@/stores/auth'
+import { isPdaOrMobileDevice } from '@/utils/device'
 import DashboardView from '@/views/DashboardView.vue'
 import LoginView from '@/views/LoginView.vue'
+import PdaHomeView from '@/views/PdaHomeView.vue'
 import { createRouter, createWebHistory } from 'vue-router'
 
 const router = createRouter({
@@ -14,9 +18,27 @@ const router = createRouter({
     },
     {
       path: '/',
-      name: 'dashboard',
-      component: DashboardView,
-      meta: { requiresAuth: true }
+      component: MainLayout,
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          name: 'dashboard',
+          component: DashboardView,
+        },
+      ],
+    },
+    {
+      path: '/pda',
+      component: PdaLayout,
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          name: 'pda-home',
+          component: PdaHomeView,
+        }
+      ]
     }
   ],
 })
@@ -35,7 +57,11 @@ router.beforeEach(async(to) => {
   }
 
   if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    return { name: 'dashboard' }
+    return isPdaOrMobileDevice() ? {path:'/pda'} : {name: 'dashboard'}
+  }
+
+  if(to.path === '/' && isPdaOrMobileDevice()) {
+    return {path: '/pda'}
   }
 })
 
