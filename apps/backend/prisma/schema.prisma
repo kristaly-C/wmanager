@@ -174,11 +174,11 @@ model Variant {
 model Location {
   id          String  @id @default(uuid())
   parentId    String?
-  parent      Location? @relation("LocationHierarchy", fields: [parentId], references: [id])
+  parent      Location? @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children    Location[] @relation("LocationHierarchy")
   
   name        String
-  description String
+  description String?
   type        LocationType
   
   stockItems  StockItem[]
@@ -348,7 +348,7 @@ model VariantBarcode {
 
 model Brand {
   id    String  @id @default(uuid())
-  name  String
+  name  String  @unique
   description String?
 
   products Product[]

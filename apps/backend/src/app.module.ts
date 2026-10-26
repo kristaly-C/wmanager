@@ -7,6 +7,7 @@ import { UserModule } from './user/user.module';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { VariantModule } from './variant/variant.module';
+import { BrandModule } from './brand/brand.module';
 
 @Module({
     imports: [
@@ -18,6 +19,7 @@ import { VariantModule } from './variant/variant.module';
         UserModule,
         AuthModule,
         VariantModule,
+        BrandModule
     ],
     controllers: [],
     providers: [],
