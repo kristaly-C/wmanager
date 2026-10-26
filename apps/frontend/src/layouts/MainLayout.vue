@@ -5,9 +5,10 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
+import { useSearchStore } from '@/stores/search';
+import GlobalProductSearch from '@/components/common/GlobalProductSearch.vue';
 
-
-
+const searchStore = useSearchStore()
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
@@ -124,88 +125,86 @@ function handleLogout() {
 </script>
 
 <template>
-    <div class="min-h-screen bg-slate-950 text-slate-100 flex">
-    <!-- BAL OLDALI FIX MENÜ (SIDEBAR) -->
-    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
-      <!-- Logó / Brand -->
-      <div class="h-16 px-6 flex items-center gap-3 border-b border-slate-800">
-        <div class="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+  <!-- Fő háttér: Nagyon világos, törtfehér/szürke (bg-slate-50), hogy a fehér kártyák kiugorjanak -->
+  <div class="min-h-screen bg-slate-50 text-slate-800 flex">
+    
+    <!-- BAL OLDALI MENÜ: Tiszta fehér, vékony szegéllyel -->
+    <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+      <!-- Logó -->
+      <div class="h-20 px-6 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20">
           <i class="pi pi-box text-xl"></i>
         </div>
         <div>
-          <span class="font-bold text-lg tracking-tight text-white">WManager</span>
-          <span class="block text-[10px] uppercase tracking-wider text-emerald-400 font-semibold">Moto WMS</span>
+          <span class="font-bold text-xl tracking-tight text-slate-900">WManager</span>
         </div>
       </div>
 
-      <!-- Navigációs linkek -->
+      <!-- Navigáció -->
       <nav class="flex-1 overflow-y-auto p-4 space-y-6">
         <div v-for="group in visibleMenuGroups" :key="group.title">
-          <p class="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <p class="px-3 mb-2 text-[11px] font-bold uppercase tracking-widest text-slate-400">
             {{ group.title }}
           </p>
           <ul class="space-y-1">
             <li v-for="item in group.items" :key="item.to">
               <RouterLink
                 :to="item.to"
-                class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
                 :class="
                   route.path === item.to
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
                 "
               >
-                <i :class="[item.icon, 'text-base']"></i>
+                <i :class="[item.icon, 'text-lg', route.path === item.to ? 'text-orange-400' : '']"></i>
                 <span>{{ item.label }}</span>
               </RouterLink>
             </li>
           </ul>
         </div>
       </nav>
-
-      <!-- Alsó PDA váltó gomb -->
-      <div class="p-4 border-t border-slate-800">
-        <Button
-          label="Váltás PDA módra"
-          icon="pi pi-mobile"
-          severity="secondary"
-          outlined
-          size="small"
-          class="w-full"
-          @click="switchToPdaMode"
-        />
-      </div>
     </aside>
 
-    <!-- JOBB OLDALI TARTALOM (FEJLÉC + MUNKATERÜLET) -->
+    <!-- JOBB OLDALI TARTALOM -->
     <div class="flex-1 flex flex-col min-w-0">
-      <!-- Felső sáv (Topbar) -->
-      <header class="h-16 bg-slate-900/70 backdrop-blur border-b border-slate-800 px-8 flex items-center justify-between">
-        <div class="flex items-center gap-2 text-slate-400 text-sm">
-          <i class="pi pi-qrcode text-emerald-400"></i>
-          <span>USB Scanner készenlétben</span>
+      <!-- Fejléc: Fehér, finom alsó szegéllyel, keresővel (mint a képen) -->
+      <header class="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between">
+        <div class="flex items-center gap-4 w-96">
+          <div class="relative w-full">
+            <div class="flex items-center gap-4 w-96">
+  <div 
+    class="relative w-full cursor-text group"
+    @click="searchStore.openSearch()"
+  >
+    <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-orange-500 transition-colors"></i>
+    <div class="w-full bg-slate-100 border border-transparent rounded-full py-2.5 pl-10 pr-4 text-sm text-slate-500 group-hover:border-orange-200 transition-all flex justify-between items-center">
+      <span>Keresés (Cikkszám, vonalkód)...</span>
+      <span class="text-[10px] font-mono bg-white px-2 py-0.5 rounded text-slate-400 shadow-sm border border-slate-200">Ctrl K</span>
+    </div>
+  </div>
+</div>
+          </div>
         </div>
 
-        <div class="flex items-center gap-4">
-          <div class="text-right">
-            <p class="text-sm font-medium text-slate-200">{{ authStore.user?.email }}</p>
+        <div class="flex items-center gap-6">
+          <Tag :value="authStore.user?.role" class="bg-orange-100 text-orange-700 font-bold px-3 py-1 rounded-full" />
+          <div class="flex items-center gap-3 border-l border-slate-200 pl-6">
+            <div class="text-right">
+              <p class="text-sm font-bold text-slate-900">{{ authStore.user?.email }}</p>
+            </div>
+            <div class="w-10 h-10 rounded-full bg-slate-200 border-2 border-white shadow-sm overflow-hidden flex justify-center items-center cursor-pointer" @click="handleLogout" title="Kijelentkezés">
+              <i class="pi pi-user text-slate-500"></i>
+            </div>
           </div>
-          <Tag :value="authStore.user?.role" severity="success" />
-          <Button
-            icon="pi pi-sign-out"
-            severity="danger"
-            text
-            rounded
-            title="Kijelentkezés"
-            @click="handleLogout"
-          />
         </div>
       </header>
 
-      <!-- Dinamikus oldal-tartalom (Ide töltődnek be a View-k!) -->
+      <!-- Munkaterület -->
       <main class="flex-1 p-8 overflow-y-auto">
         <RouterView />
       </main>
     </div>
+    <GlobalProductSearch />
   </div>
 </template>

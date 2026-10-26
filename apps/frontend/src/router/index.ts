@@ -2,6 +2,7 @@ import MainLayout from '@/layouts/MainLayout.vue'
 import PdaLayout from '@/layouts/PdaLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isPdaOrMobileDevice } from '@/utils/device'
+import CategoriesView from '@/views/CategoriesView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import LoginView from '@/views/LoginView.vue'
 import PdaHomeView from '@/views/PdaHomeView.vue'
@@ -25,6 +26,11 @@ const router = createRouter({
           path: '',
           name: 'dashboard',
           component: DashboardView,
+        },
+        {
+          path: 'categories',
+          name: 'categories',
+          component: CategoriesView,
         },
       ],
     },
