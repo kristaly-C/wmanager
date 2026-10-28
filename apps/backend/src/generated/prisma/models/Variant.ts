@@ -296,11 +296,11 @@ export type VariantOrderByWithRelationInput = {
 
 export type VariantWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  sku?: string
   AND?: Prisma.VariantWhereInput | Prisma.VariantWhereInput[]
   OR?: Prisma.VariantWhereInput[]
   NOT?: Prisma.VariantWhereInput | Prisma.VariantWhereInput[]
   productId?: Prisma.StringFilter<"Variant"> | string
-  sku?: Prisma.StringFilter<"Variant"> | string
   colors?: Prisma.StringNullableListFilter<"Variant">
   size?: Prisma.StringFilter<"Variant"> | string
   weight?: Prisma.DecimalFilter<"Variant"> | runtime.Decimal | runtime.DecimalJsLike | number | string
@@ -314,7 +314,7 @@ export type VariantWhereUniqueInput = Prisma.AtLeast<{
   returnCaseItems?: Prisma.ReturnCaseItemListRelationFilter
   stockMovements?: Prisma.StockMovementListRelationFilter
   variantBarcodes?: Prisma.VariantBarcodeListRelationFilter
-}, "id">
+}, "id" | "sku">
 
 export type VariantOrderByWithAggregationInput = {
   id?: Prisma.SortOrder

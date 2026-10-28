@@ -175,7 +175,7 @@ export type LocationGroupByOutputType = {
   id: string
   parentId: string | null
   name: string
-  description: string
+  description: string | null
   type: $Enums.LocationType
   isActive: boolean
   slotMode: $Enums.SlotMode | null
@@ -208,7 +208,7 @@ export type LocationWhereInput = {
   id?: Prisma.StringFilter<"Location"> | string
   parentId?: Prisma.StringNullableFilter<"Location"> | string | null
   name?: Prisma.StringFilter<"Location"> | string
-  description?: Prisma.StringFilter<"Location"> | string
+  description?: Prisma.StringNullableFilter<"Location"> | string | null
   type?: Prisma.EnumLocationTypeFilter<"Location"> | $Enums.LocationType
   isActive?: Prisma.BoolFilter<"Location"> | boolean
   slotMode?: Prisma.EnumSlotModeNullableFilter<"Location"> | $Enums.SlotMode | null
@@ -227,7 +227,7 @@ export type LocationOrderByWithRelationInput = {
   id?: Prisma.SortOrder
   parentId?: Prisma.SortOrderInput | Prisma.SortOrder
   name?: Prisma.SortOrder
-  description?: Prisma.SortOrder
+  description?: Prisma.SortOrderInput | Prisma.SortOrder
   type?: Prisma.SortOrder
   isActive?: Prisma.SortOrder
   slotMode?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -249,7 +249,7 @@ export type LocationWhereUniqueInput = Prisma.AtLeast<{
   NOT?: Prisma.LocationWhereInput | Prisma.LocationWhereInput[]
   parentId?: Prisma.StringNullableFilter<"Location"> | string | null
   name?: Prisma.StringFilter<"Location"> | string
-  description?: Prisma.StringFilter<"Location"> | string
+  description?: Prisma.StringNullableFilter<"Location"> | string | null
   type?: Prisma.EnumLocationTypeFilter<"Location"> | $Enums.LocationType
   isActive?: Prisma.BoolFilter<"Location"> | boolean
   slotMode?: Prisma.EnumSlotModeNullableFilter<"Location"> | $Enums.SlotMode | null
@@ -268,7 +268,7 @@ export type LocationOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
   parentId?: Prisma.SortOrderInput | Prisma.SortOrder
   name?: Prisma.SortOrder
-  description?: Prisma.SortOrder
+  description?: Prisma.SortOrderInput | Prisma.SortOrder
   type?: Prisma.SortOrder
   isActive?: Prisma.SortOrder
   slotMode?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -286,7 +286,7 @@ export type LocationScalarWhereWithAggregatesInput = {
   id?: Prisma.StringWithAggregatesFilter<"Location"> | string
   parentId?: Prisma.StringNullableWithAggregatesFilter<"Location"> | string | null
   name?: Prisma.StringWithAggregatesFilter<"Location"> | string
-  description?: Prisma.StringWithAggregatesFilter<"Location"> | string
+  description?: Prisma.StringNullableWithAggregatesFilter<"Location"> | string | null
   type?: Prisma.EnumLocationTypeWithAggregatesFilter<"Location"> | $Enums.LocationType
   isActive?: Prisma.BoolWithAggregatesFilter<"Location"> | boolean
   slotMode?: Prisma.EnumSlotModeNullableWithAggregatesFilter<"Location"> | $Enums.SlotMode | null
@@ -297,7 +297,7 @@ export type LocationScalarWhereWithAggregatesInput = {
 export type LocationCreateInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -316,7 +316,7 @@ export type LocationUncheckedCreateInput = {
   id?: string
   parentId?: string | null
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -333,7 +333,7 @@ export type LocationUncheckedCreateInput = {
 export type LocationUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -352,7 +352,7 @@ export type LocationUncheckedUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -370,7 +370,7 @@ export type LocationCreateManyInput = {
   id?: string
   parentId?: string | null
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -381,7 +381,7 @@ export type LocationCreateManyInput = {
 export type LocationUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -393,7 +393,7 @@ export type LocationUncheckedUpdateManyInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -596,7 +596,7 @@ export type LocationUpdateOneRequiredWithoutStockMovementsNestedInput = {
 export type LocationCreateWithoutChildrenInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -614,7 +614,7 @@ export type LocationUncheckedCreateWithoutChildrenInput = {
   id?: string
   parentId?: string | null
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -635,7 +635,7 @@ export type LocationCreateOrConnectWithoutChildrenInput = {
 export type LocationCreateWithoutParentInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -652,7 +652,7 @@ export type LocationCreateWithoutParentInput = {
 export type LocationUncheckedCreateWithoutParentInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -690,7 +690,7 @@ export type LocationUpdateToOneWithWhereWithoutChildrenInput = {
 export type LocationUpdateWithoutChildrenInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -708,7 +708,7 @@ export type LocationUncheckedUpdateWithoutChildrenInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -744,7 +744,7 @@ export type LocationScalarWhereInput = {
   id?: Prisma.StringFilter<"Location"> | string
   parentId?: Prisma.StringNullableFilter<"Location"> | string | null
   name?: Prisma.StringFilter<"Location"> | string
-  description?: Prisma.StringFilter<"Location"> | string
+  description?: Prisma.StringNullableFilter<"Location"> | string | null
   type?: Prisma.EnumLocationTypeFilter<"Location"> | $Enums.LocationType
   isActive?: Prisma.BoolFilter<"Location"> | boolean
   slotMode?: Prisma.EnumSlotModeNullableFilter<"Location"> | $Enums.SlotMode | null
@@ -755,7 +755,7 @@ export type LocationScalarWhereInput = {
 export type LocationCreateWithoutStockItemsInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -773,7 +773,7 @@ export type LocationUncheckedCreateWithoutStockItemsInput = {
   id?: string
   parentId?: string | null
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -805,7 +805,7 @@ export type LocationUpdateToOneWithWhereWithoutStockItemsInput = {
 export type LocationUpdateWithoutStockItemsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -823,7 +823,7 @@ export type LocationUncheckedUpdateWithoutStockItemsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -839,7 +839,7 @@ export type LocationUncheckedUpdateWithoutStockItemsInput = {
 export type LocationCreateWithoutTransfersFromInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -857,7 +857,7 @@ export type LocationUncheckedCreateWithoutTransfersFromInput = {
   id?: string
   parentId?: string | null
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -878,7 +878,7 @@ export type LocationCreateOrConnectWithoutTransfersFromInput = {
 export type LocationCreateWithoutTransfersToInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -896,7 +896,7 @@ export type LocationUncheckedCreateWithoutTransfersToInput = {
   id?: string
   parentId?: string | null
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -928,7 +928,7 @@ export type LocationUpdateToOneWithWhereWithoutTransfersFromInput = {
 export type LocationUpdateWithoutTransfersFromInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -946,7 +946,7 @@ export type LocationUncheckedUpdateWithoutTransfersFromInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -973,7 +973,7 @@ export type LocationUpdateToOneWithWhereWithoutTransfersToInput = {
 export type LocationUpdateWithoutTransfersToInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -991,7 +991,7 @@ export type LocationUncheckedUpdateWithoutTransfersToInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -1007,7 +1007,7 @@ export type LocationUncheckedUpdateWithoutTransfersToInput = {
 export type LocationCreateWithoutStocktakeSessionsInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -1025,7 +1025,7 @@ export type LocationUncheckedCreateWithoutStocktakeSessionsInput = {
   id?: string
   parentId?: string | null
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -1057,7 +1057,7 @@ export type LocationUpdateToOneWithWhereWithoutStocktakeSessionsInput = {
 export type LocationUpdateWithoutStocktakeSessionsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -1075,7 +1075,7 @@ export type LocationUncheckedUpdateWithoutStocktakeSessionsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -1091,7 +1091,7 @@ export type LocationUncheckedUpdateWithoutStocktakeSessionsInput = {
 export type LocationCreateWithoutStockMovementsInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -1109,7 +1109,7 @@ export type LocationUncheckedCreateWithoutStockMovementsInput = {
   id?: string
   parentId?: string | null
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -1141,7 +1141,7 @@ export type LocationUpdateToOneWithWhereWithoutStockMovementsInput = {
 export type LocationUpdateWithoutStockMovementsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -1159,7 +1159,7 @@ export type LocationUncheckedUpdateWithoutStockMovementsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   parentId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -1175,7 +1175,7 @@ export type LocationUncheckedUpdateWithoutStockMovementsInput = {
 export type LocationCreateManyParentInput = {
   id?: string
   name: string
-  description: string
+  description?: string | null
   type: $Enums.LocationType
   isActive?: boolean
   slotMode?: $Enums.SlotMode | null
@@ -1186,7 +1186,7 @@ export type LocationCreateManyParentInput = {
 export type LocationUpdateWithoutParentInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -1203,7 +1203,7 @@ export type LocationUpdateWithoutParentInput = {
 export type LocationUncheckedUpdateWithoutParentInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -1220,7 +1220,7 @@ export type LocationUncheckedUpdateWithoutParentInput = {
 export type LocationUncheckedUpdateManyWithoutParentInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   name?: Prisma.StringFieldUpdateOperationsInput | string
-  description?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   type?: Prisma.EnumLocationTypeFieldUpdateOperationsInput | $Enums.LocationType
   isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean
   slotMode?: Prisma.NullableEnumSlotModeFieldUpdateOperationsInput | $Enums.SlotMode | null
@@ -1395,7 +1395,7 @@ export type $LocationPayload<ExtArgs extends runtime.Types.Extensions.InternalAr
     id: string
     parentId: string | null
     name: string
-    description: string
+    description: string | null
     type: $Enums.LocationType
     isActive: boolean
     slotMode: $Enums.SlotMode | null

@@ -8,6 +8,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { VariantModule } from './variant/variant.module';
 import { BrandModule } from './brand/brand.module';
+import { LOcationModule } from './location/location.module';
 
 @Module({
     imports: [
@@ -19,7 +20,8 @@ import { BrandModule } from './brand/brand.module';
         UserModule,
         AuthModule,
         VariantModule,
-        BrandModule
+        BrandModule,
+        LOcationModule
     ],
     controllers: [],
     providers: [],
