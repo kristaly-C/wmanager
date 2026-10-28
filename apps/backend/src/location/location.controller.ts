@@ -24,7 +24,7 @@ export class LocationController {
         return this.locationService.findOne(id);
     }
 
-    @Roles(Role.ADMIN, Role.BOSS, Role.STORE_MANAGER, Role.WAREHOUSE_MANAGER)
+    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER)
     @Post()
     create(@Body() data: CreateLocationDto ) {
         return this.locationService.createLocation(data)

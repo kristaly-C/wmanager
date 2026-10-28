@@ -46,8 +46,8 @@ export class LocationService extends BaseService<PrismaService['location']> {
     }
 
 
-    private assertValidSlotMode(type: LocationType, SlotMode?: SlotMode | null) {
-        const hasSlotMode = SlotMode !== undefined && SlotMode !== null;
+    private assertValidSlotMode(type: LocationType, slotMode?: SlotMode | null) {
+        const hasSlotMode = slotMode !== undefined && slotMode !== null;
         if((type === 'WAREHOUSE' || type === 'STORE') && hasSlotMode) {
             throw new BadRequestException('A slotMode csak ZONE és SHELF típusnál adható meg');
         }
@@ -58,7 +58,7 @@ export class LocationService extends BaseService<PrismaService['location']> {
         this.assertValidSlotMode(data.type, data.slotMode);
         return super.create({
             name: data.name,
-            description: data.description ?? '',
+            description: data.description,
             type: data.type,
             slotMode: data.slotMode,
             isActive: data.isActive,

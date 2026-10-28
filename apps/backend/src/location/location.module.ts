@@ -7,4 +7,4 @@ import { LocationController } from "./location.controller";
     controllers: [LocationController],
     providers: [LocationService]
 })
-export class LOcationModule{}
+export class LocationModule{}

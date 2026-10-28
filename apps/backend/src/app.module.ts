@@ -8,7 +8,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { VariantModule } from './variant/variant.module';
 import { BrandModule } from './brand/brand.module';
-import { LOcationModule } from './location/location.module';
+import { LocationModule } from './location/location.module';
 
 @Module({
     imports: [
@@ -21,7 +21,7 @@ import { LOcationModule } from './location/location.module';
         AuthModule,
         VariantModule,
         BrandModule,
-        LOcationModule
+        LocationModule
     ],
     controllers: [],
     providers: [],
