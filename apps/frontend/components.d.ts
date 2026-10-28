@@ -17,5 +17,7 @@ declare module 'vue' {
     PageHeader: typeof import('./src/components/common/PageHeader.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    Select: typeof import('primevue/select')['default']
+    Tag: typeof import('primevue/tag')['default']
   }
 }
