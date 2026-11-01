@@ -113,7 +113,7 @@ export interface Location {
     id: string;
     parentId?: string;
     name: string;
-    description: string;
+    description?: string;
     type: LocationType;
     isActive: boolean;
     slotMode?: SlotMode;

@@ -1,6 +1,7 @@
 # --- Függőségek ---
 node_modules/
 **/node_modules/
+apps/backend/src/generated/
 
 # --- Build / Fordított kimenetek ---
 dist/
