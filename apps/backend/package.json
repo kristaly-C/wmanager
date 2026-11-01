@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node dist/main",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "db:migrate": "prisma migrate dev && prisma generate"
   },
   "keywords": [],
   "author": "",

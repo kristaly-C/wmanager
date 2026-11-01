@@ -84,6 +84,7 @@ model User {
   stocktakeSessions StocktakeSession[]
   returnCases ReturnCase[]
   stockMovements StockMovement[]
+  userLocations UserLocation[]
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -94,7 +95,7 @@ model Category {
   id String @id @default(uuid())
   name String
   parentId String?
-  parent Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  parent Category? @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children Category[] @relation("CategoryHierarchy")
 
   products Product[]
@@ -186,6 +187,8 @@ model Location {
   transfersFrom StockTransfer[] @relation("TransferFrom")
   transfersTo   StockTransfer[] @relation("TransferTo")
   stocktakeSessions StocktakeSession[]
+
+  userLocations UserLocation[]
 
   isActive    Boolean @default(true)
   slotMode    SlotMode?
@@ -355,4 +358,15 @@ model Brand {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model UserLocation {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locationId String
+  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, locationId])
 }

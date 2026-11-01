@@ -7,7 +7,7 @@ import { UserModel } from '../generated/prisma/models';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '../generated/prisma/enums';
-import { Roles } from '../auth/decorators/roles.decorator';
+
 
 @Injectable()
 export class UserService extends BaseService<PrismaService['user']> {
@@ -73,7 +73,7 @@ export class UserService extends BaseService<PrismaService['user']> {
     return rest;
   }
 
-  private assertCanManage(actor: AuthUser, targetRole: Role){
+  public assertCanManage(actor: AuthUser, targetRole: Role){
     const protectedRoles: Role[] = [Role.ADMIN, Role.BOSS];
     if (protectedRoles.includes(targetRole) && actor.role !== Role.BOSS) {
       throw new ForbiddenException('Only a BOSS can manage ADMIN and BOSS accounts');
