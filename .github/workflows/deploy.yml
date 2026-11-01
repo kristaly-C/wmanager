@@ -1,0 +1,40 @@
+name: Deploy to Proxmox
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy Docker Stack
+    runs-on: [self-hosted, linux]
+
+    steps:
+      - name: Kód letöltése
+        uses: actions/checkout@v4
+
+      - name: Környezeti változók (.env) ellenőrzése
+        run: |
+          if [ ! -f /opt/wmanager/.env ]; then
+            echo "HIBA: A /opt/wmanager/.env fájl nem található a szerveren!"
+            echo "Hozd létre a .env.prod.example alapján a Proxmox gépen."
+            exit 1
+          fi
+          cp docker-compose.prod.yml /opt/wmanager/docker-compose.prod.yml || true
+
+      - name: Docker konténerek újraépítése és indítása
+        run: |
+          docker compose \
+            -p wmanager \
+            --env-file /opt/wmanager/.env \
+            -f docker-compose.prod.yml \
+            up -d --build --remove-orphans
+
+      - name: Régi, nem használt Docker image-ek takarítása
+        run: docker image prune -f

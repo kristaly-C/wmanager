@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+dist
+**/dist
+apps/backend/src/generated
+.git
+.github
+.vscode
+.cursor
+.idea
+.env
+.env.*
+!.env.example
+!.env.prod.example
+**/npm-debug.log*
+*.log
