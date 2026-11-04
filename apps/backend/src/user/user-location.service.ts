@@ -30,7 +30,7 @@ export class UserLocationService {
         this.userService.assertCanManage(actor, target.role);
 
 
-        if (LOCATION_UNBOUND_ROLES.includes(actor.role)) {
+        if (LOCATION_UNBOUND_ROLES.includes(target.role)) {
             throw new BadRequestException('Ehhez a szerepkörhöz nem rendelhető hely.');
         }
 
