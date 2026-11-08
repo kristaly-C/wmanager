@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useSearchStore, type QuickProductInfo } from '@/stores/search'
 import Dialog from 'primevue/dialog'
 
@@ -7,6 +7,7 @@ const searchStore = useSearchStore()
 const searchQuery = ref('')
 const selectedIndex = ref(0)
 const copiedSku = ref<string | null>(null)
+const searchInput = ref<HTMLInputElement | null>(null)
 
 // Teszt adatok (később ezt a backend API-ból töltjük majd)
 const mockProducts: QuickProductInfo[] = [
@@ -98,6 +99,22 @@ function handleKeydown(e: KeyboardEvent) {
     return
   }
 
+  if (e.key === 'Escape') {
+    if(searchStore.isProductSheetOpen) {
+      e.preventDefault()
+      searchStore.closeProductionSheet()
+      nextTick(() => {
+        searchInput.value?.focus()
+      })
+      return
+    }
+    if(searchStore.isSearchOpen){
+      e.preventDefault()
+      searchStore.closeSearch()
+      return
+    }
+  }
+
   // 2. F5 -> Bárhol vagyunk, ha van kijelölt termék, megnyitja a Termék Törzslap ablakot!
   if (e.key === 'F5') {
     if (searchStore.highlightedProduct) {
@@ -143,7 +160,7 @@ onUnmounted(() => {
     v-model:visible="searchStore.isSearchOpen"
     modal
     dismissableMask
-    :closeOnEscape="!searchStore.isProductSheetOpen"
+    :closeOnEscape="false"
     position="top"
     :showHeader="false"
     :draggable="false"
@@ -161,6 +178,7 @@ onUnmounted(() => {
           autofocus
           placeholder="Keress terméknévre, cikkszámra (SKU), modellre vagy csippants vonalkódot..."
           class="w-full text-base text-slate-900 placeholder-slate-400 bg-transparent outline-none"
+          ref="searchInput"
         />
         <button
           v-if="searchQuery"
@@ -286,6 +304,7 @@ onUnmounted(() => {
     v-model:visible="searchStore.isProductSheetOpen"
     modal
     dismissableMask
+    :closeOnEscape="false"
     :header="searchStore.activeProductSheet ? `Termék Törzslap — ${searchStore.activeProductSheet.name}` : 'Termék Törzslap'"
     class="w-[95vw] max-w-4xl !rounded-3xl"
   >

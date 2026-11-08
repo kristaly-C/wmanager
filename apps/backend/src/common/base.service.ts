@@ -11,8 +11,8 @@ export abstract class BaseService <
 > {
   constructor(protected readonly delegate: TDelegate) {}
 
-  findAll() {
-    return this.delegate.findMany();
+  findAll(args?: Parameters<TDelegate['findMany']>[0]) {
+    return this.delegate.findMany(args);
   }
 
   async findOne(id: string) {

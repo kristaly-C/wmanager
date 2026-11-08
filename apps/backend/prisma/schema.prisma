@@ -7,7 +7,7 @@ generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
   moduleFormat = "cjs"
-  importFileExtension = "ts"
+  importFileExtension = ""
 }
 
 datasource db {
@@ -20,6 +20,7 @@ enum LocationType {
   STORE
   ZONE
   SHELF
+  BIN
 }
 enum SlotMode {
   DEDICATED
@@ -86,6 +87,7 @@ model User {
   stockMovements StockMovement[]
   userLocations UserLocation[]
 
+  passwordChangedAt DateTime?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

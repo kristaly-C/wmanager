@@ -19,6 +19,7 @@ export enum LocationType {
     STORE = 'STORE',
     ZONE = 'ZONE',
     SHELF = 'SHELF',
+    BIN = 'BIN',
   }
 
   export enum MovementType {

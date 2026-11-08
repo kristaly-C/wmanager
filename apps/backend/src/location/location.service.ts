@@ -17,7 +17,8 @@ export class LocationService extends BaseService<PrismaService['location']> {
         WAREHOUSE: [],
         STORE: [],
         ZONE: ['WAREHOUSE', 'STORE'],
-        SHELF: ['ZONE']
+        SHELF: ['ZONE'],
+        BIN: ['SHELF']
     }
 
     private async assertValidPlacement(type: LocationType, parentId?: string | null) {
@@ -76,6 +77,6 @@ export class LocationService extends BaseService<PrismaService['location']> {
             this.assertValidSlotMode(current.type, data.slotMode);
         }
     
-        return super.update(id, data);
+        return this.prisma.location.update({ where: { id }, data });
     }
 }
