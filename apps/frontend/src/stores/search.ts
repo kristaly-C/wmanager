@@ -44,7 +44,7 @@ export const useSearchStore = defineStore('search', () => {
         isProductSheetOpen.value = true
     }
 
-    function closeProductionSheet() {
+    function closeProductSheet() {
         isProductSheetOpen.value = false
     }
 
@@ -57,6 +57,6 @@ export const useSearchStore = defineStore('search', () => {
         closeSearch,
         setHighlightedProduct,
         openProductSheet,
-        closeProductionSheet,
+        closeProductSheet,
     }
 })

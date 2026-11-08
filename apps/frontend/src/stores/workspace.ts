@@ -41,7 +41,7 @@ export const WORKSPACES: WorkspaceConfig[] = [
     allowedRoles: [Role.ADMIN, Role.BOSS, Role.ORDER_CLERK, Role.WAREHOUSE_MANAGER, Role.STORE_MANAGER],
     navItems: [
       { label: 'Áttekintés', icon: 'pi pi-home', to: '/' },
-      { label: 'Katalógus', icon: 'pi pi-tags', to: '/categories' }, // Később '/catalog' al-fülekkel
+      { label: 'Katalógus', icon: 'pi pi-tags', to: '/catalog' }, // Később '/catalog' al-fülekkel
       { label: 'Beszerzés', icon: 'pi pi-shopping-cart', to: '/purchase-orders' },
       { label: 'Áruszétosztás', icon: 'pi pi-arrows-h', to: '/transfers' },
     ],
