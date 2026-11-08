@@ -102,7 +102,7 @@ function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     if(searchStore.isProductSheetOpen) {
       e.preventDefault()
-      searchStore.closeProductionSheet()
+      searchStore.closeProductSheet()
       nextTick(() => {
         searchInput.value?.focus()
       })
