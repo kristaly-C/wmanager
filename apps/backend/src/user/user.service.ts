@@ -1,4 +1,4 @@
-import { ConflictException, Delete, ForbiddenException, Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { BaseService } from '../common/base.service';
@@ -17,6 +17,7 @@ export class UserService extends BaseService<PrismaService['user']> {
 
   async createUser(data: CreateUserDto, actor: AuthUser) {
     this.assertCanManage(actor, data.role)
+    this.assertRoleAssignable(data.role)
     const passwordHash = await bcrypt.hash(data.password, 10);
     const { password, ...rest } = data;
 
@@ -25,8 +26,8 @@ export class UserService extends BaseService<PrismaService['user']> {
   
   }
 
-  async findAll() {
-    const users = await super.findAll();
+  async findAll(args?: Parameters<PrismaService['user']['findMany']>[0]) {
+    const users = await super.findAll(args);
     return users.map((u: UserModel) => this.excludePassword(u));
   }
 
@@ -47,7 +48,7 @@ export class UserService extends BaseService<PrismaService['user']> {
     if(pickedUser.role === 'BOSS'){
       throw new ConflictException('Cannot delete the BOSS');
     }
-    const removed = await super.remove(id);
+    const removed = await this.prisma.user.delete({ where: { id } });
     return this.excludePassword(removed);
   }
 
@@ -61,10 +62,14 @@ export class UserService extends BaseService<PrismaService['user']> {
       this.assertCanManage(actor, data.role);
     }
 
+    if(data.role === Role.BOSS && target.role !== Role.BOSS){
+      this.assertRoleAssignable(data.role);
+    }
+
     if (target.role === Role.BOSS && data.role && data.role !== Role.BOSS) {
       throw new ConflictException('Cannot change the role of a BOSS');
-  }
-    const updated = await super.update(id, data);
+    }
+    const updated = await this.prisma.user.update({ where: { id }, data });
     return this.excludePassword(updated);
   }
 
@@ -77,6 +82,12 @@ export class UserService extends BaseService<PrismaService['user']> {
     const protectedRoles: Role[] = [Role.ADMIN, Role.BOSS];
     if (protectedRoles.includes(targetRole) && actor.role !== Role.BOSS) {
       throw new ForbiddenException('Only a BOSS can manage ADMIN and BOSS accounts');
+    }
+  }
+
+  private assertRoleAssignable(role: Role){
+    if( role === Role.BOSS){
+      throw new ForbiddenException('BOSS fiók csak a telepítéskor (seed) hozható létre');
     }
   }
 }

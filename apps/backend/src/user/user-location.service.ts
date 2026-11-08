@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { BaseService } from "../common/base.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UserService } from "./user.service";
 import { AuthUser } from "../auth/decorators/current-user.decorator";
@@ -10,7 +9,6 @@ import { LocationType } from "../generated/prisma/enums";
 
 @Injectable()
 export class UserLocationService {
-    locationService: any;
     constructor(
         private prisma: PrismaService,
         private userService: UserService,
