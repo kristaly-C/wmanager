@@ -27,9 +27,11 @@ async function handleLogin() {
     // Ha sikeres a belépés, átirányítjuk a főoldalra (Dashboard)
     router.push('/')
   } catch (error: any) {
-    // Ha a backend 401-et dob ('Invalid credentials'), kiírjuk magyarul
-    if (error.response?.status === 401) {
+    const status = error.response?.status
+    if (status === 401) {
       errorMessage.value = 'Hibás e-mail cím vagy jelszó (vagy inaktív fiók).'
+    } else if (status === 429) {
+      errorMessage.value = 'Túl sok sikertelen próbálkozás. Kérlek, várj 1 percet, majd próbáld újra!'
     } else {
       errorMessage.value = 'Nem sikerült csatlakozni a szerverhez.'
     }

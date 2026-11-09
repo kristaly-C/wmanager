@@ -71,6 +71,9 @@ export class LocationService extends BaseService<PrismaService['location']> {
         const current = await this.findOne(id);
     
         if (data.parentId !== undefined) {
+            if (data.parentId === id) {
+                throw new BadRequestException('A lokáció nem lehet saját maga szülője');
+            }
             await this.assertValidPlacement(current.type, data.parentId);
         }
         if (data.slotMode !== undefined) {

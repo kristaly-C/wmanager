@@ -14,8 +14,13 @@ packages/*/dist/
 
 # --- Környezeti változók és titkok (Nagyon fontos!) ---
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.prod.example
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.prod.example
 
 # --- Naplók és hibafájlok ---
 npm-debug.log*
