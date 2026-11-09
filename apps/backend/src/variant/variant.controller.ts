@@ -6,7 +6,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { Role } from "../generated/prisma/enums";
-
+import { AuthUser, CurrentUser } from "../auth/decorators/current-user.decorator";
 
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -15,8 +15,8 @@ export class VariantController {
     constructor(private variantService: VariantService) {}
 
     @Get()
-    findAll() {
-        return this.variantService.findAll();
+    findAll(@CurrentUser() user: AuthUser) {
+        return this.variantService.findAllForUser(user);
     }
 
     @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER)
@@ -26,8 +26,8 @@ export class VariantController {
     }
 
     @Get(':id')
-    findOne(@Param('id') id: string){
-        return this.variantService.findOne(id);
+    findOne(@Param('id') id: string, @CurrentUser() user: AuthUser){
+        return this.variantService.findOneForUser(id, user);
     }
 
     @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER)

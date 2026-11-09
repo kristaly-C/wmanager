@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { BaseService } from "../common/base.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { LocationType, SlotMode } from "../generated/prisma/enums";
@@ -50,7 +50,7 @@ export class LocationService extends BaseService<PrismaService['location']> {
     private assertValidSlotMode(type: LocationType, slotMode?: SlotMode | null) {
         const hasSlotMode = slotMode !== undefined && slotMode !== null;
         if((type === 'WAREHOUSE' || type === 'STORE') && hasSlotMode) {
-            throw new BadRequestException('A slotMode csak ZONE és SHELF típusnál adható meg');
+            throw new BadRequestException('A slotMode csak ZONE, SHELF és BIN típusnál adható meg');
         }
     }
 
@@ -71,6 +71,9 @@ export class LocationService extends BaseService<PrismaService['location']> {
         const current = await this.findOne(id);
     
         if (data.parentId !== undefined) {
+            if (data.parentId === id) {
+                throw new BadRequestException('A lokáció nem lehet saját maga szülője');
+            }
             await this.assertValidPlacement(current.type, data.parentId);
         }
         if (data.slotMode !== undefined) {
@@ -78,5 +81,24 @@ export class LocationService extends BaseService<PrismaService['location']> {
         }
     
         return this.prisma.location.update({ where: { id }, data });
+    }
+
+    async remove(id: string) {
+        await this.findOne(id);
+
+        const childCount = await this.prisma.location.count({
+            where: { parentId: id},
+        });
+        if(childCount > 0){
+            throw new ConflictException('Nem törölhető olyan lokáció, amelynek még vannak al-lokációi');
+        }
+        const stockCount = await this.prisma.stockItem.count({
+            where: { locationId: id, quantity: {gt: 0}},
+        });
+        if( stockCount > 0){
+            throw new ConflictException('Nem törölhető olyan lokáció, amelyen még van készlet');
+        }
+
+        return this.prisma.location.delete({ where: { id}});
     }
 }

@@ -37,15 +37,20 @@ export class UserService extends BaseService<PrismaService['user']> {
   }
 
   async removeUser(id: string, actor: AuthUser) {
+    if (actor.userId === id) {
+      throw new ConflictException('Saját fiók nem törölhető');
+    }
     const pickedUser = await this.findOne(id);
     this.assertCanManage(actor, pickedUser.role);
-    if(pickedUser.role === 'ADMIN'){
-      const numberOfAdmins = await this.prisma.user.count({where: {role: 'ADMIN'}});
-      if(numberOfAdmins < 2){
+    if (pickedUser.role === Role.ADMIN && pickedUser.isActive) {
+      const numberOfAdmins = await this.prisma.user.count({
+        where: { role: Role.ADMIN, isActive: true },
+      });
+      if (numberOfAdmins < 2) {
         throw new ConflictException('Cannot delete the last ADMIN user');
       }
     }
-    if(pickedUser.role === 'BOSS'){
+    if (pickedUser.role === Role.BOSS) {
       throw new ConflictException('Cannot delete the BOSS');
     }
     const removed = await this.prisma.user.delete({ where: { id } });
@@ -53,22 +58,47 @@ export class UserService extends BaseService<PrismaService['user']> {
   }
 
 
-  async updateUser(id: string, data: UpdateUserDto, actor: AuthUser){
+  async updateUser(id: string, data: UpdateUserDto, actor: AuthUser) {
     const target = await this.findOne(id);
 
     this.assertCanManage(actor, target.role);
-    
-    if(data.role){
+
+    if (actor.userId === id) {
+      if (data.role && data.role !== target.role) {
+        throw new ConflictException('Saját szerepkör nem módosítható');
+      }
+      if (data.isActive === false) {
+        throw new ConflictException('Saját fiók nem tiltható le');
+      }
+    }
+
+    if (data.role) {
       this.assertCanManage(actor, data.role);
     }
 
-    if(data.role === Role.BOSS && target.role !== Role.BOSS){
+    if (data.role === Role.BOSS && target.role !== Role.BOSS) {
       this.assertRoleAssignable(data.role);
     }
 
     if (target.role === Role.BOSS && data.role && data.role !== Role.BOSS) {
       throw new ConflictException('Cannot change the role of a BOSS');
     }
+
+    if (target.role === Role.BOSS && data.isActive === false) {
+      throw new ConflictException('BOSS fiók nem tiltható le');
+    }
+
+    const isDemotingAdmin = target.role === Role.ADMIN && data.role && data.role !== Role.ADMIN;
+    const isDeactivatingAdmin = target.role === Role.ADMIN && data.isActive === false;
+    if (target.isActive && (isDemotingAdmin || isDeactivatingAdmin)) {
+      const numberOfAdmins = await this.prisma.user.count({
+        where: { role: Role.ADMIN, isActive: true },
+      });
+      if (numberOfAdmins < 2) {
+        throw new ConflictException('Az utolsó aktív ADMIN nem fokozható le és nem tiltható le');
+      }
+    }
+
     const updated = await this.prisma.user.update({ where: { id }, data });
     return this.excludePassword(updated);
   }

@@ -13,7 +13,8 @@ import { AuthUser, CurrentUser } from '../auth/decorators/current-user.decorator
 export class UserController {
     constructor(private readonly userService: UserService) {}
 
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(Role.ADMIN, Role.BOSS, Role.STORE_MANAGER, Role.WAREHOUSE_MANAGER)
     @Get()
     findAll() {
         return this.userService.findAll();

@@ -75,15 +75,31 @@ watch(searchQuery, () => {
   selectedIndex.value = 0
 })
 
-// SKU másolása vágólapra
+// SKU másolása vágólapra (HTTP / nem-HTTPS környezetben is működő fallbackkel)
 async function copySku(sku: string) {
-  await navigator.clipboard.writeText(sku)
-  copiedSku.value = sku
-  setTimeout(() => {
-    if (copiedSku.value === sku) {
-      copiedSku.value = null
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(sku)
+    } else {
+      const textArea = document.createElement('textarea')
+      textArea.value = sku
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-9999px'
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
     }
-  }, 1500)
+    copiedSku.value = sku
+    setTimeout(() => {
+      if (copiedSku.value === sku) {
+        copiedSku.value = null
+      }
+    }, 1500)
+  } catch (err) {
+    console.error('Nem sikerült a vágólapra másolni:', err)
+  }
 }
 
 // Billentyűzet figyelő: Ctrl+K (Kereső), F5 (Termék Törzslap bárhonnan!), Nyilak (Lépegetés)

@@ -1,13 +1,15 @@
-import { IsOptional, IsString, MinLength } from "class-validator"
+import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 
 export class CreateBrandDto {
     
     @IsString()
     @MinLength(1)
+    @MaxLength(150)
     name!: string;
 
     @IsOptional()
     @IsString()
+    @MaxLength(1000)
     description?: string;
 }

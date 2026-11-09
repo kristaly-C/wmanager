@@ -48,7 +48,6 @@ export interface User {
     email: string;
     name: string;
     role: Role;
-    passwordHash: string;
     isActive: boolean;
     createdAt: string;
     updatedAt: string;
@@ -69,7 +68,7 @@ export interface Variant {
     weight: number;
 
     price: number;
-    costPrice: number;
+    costPrice?: number;
 
     isActive: boolean;
     createdAt: string;

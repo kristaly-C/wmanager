@@ -3,11 +3,19 @@ import PdaLayout from '@/layouts/PdaLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isPdaOrMobileDevice } from '@/utils/device'
 import CatalogView from '@/views/CatalogView.vue'
-import CategoriesView from '@/views/CategoriesView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import LoginView from '@/views/LoginView.vue'
 import PdaHomeView from '@/views/PdaHomeView.vue'
+import { Role } from '@wmanager/shared-types'
 import { createRouter, createWebHistory } from 'vue-router'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    requiresGuest?: boolean
+    allowedRoles?: Role[]
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -16,7 +24,7 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: LoginView,
-      meta: { requiresGuest: true }
+      meta: { requiresGuest: true },
     },
     {
       path: '/',
@@ -32,6 +40,15 @@ const router = createRouter({
           path: 'catalog',
           name: 'catalog',
           component: CatalogView,
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.ORDER_CLERK,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+            ],
+          },
         },
       ],
     },
@@ -44,18 +61,16 @@ const router = createRouter({
           path: '',
           name: 'pda-home',
           component: PdaHomeView,
-        }
-      ]
-    }
+        },
+      ],
+    },
   ],
 })
 
-
-router.beforeEach(async(to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
-
-  if(!authStore.isInitialized) {
+  if (!authStore.isInitialized) {
     await authStore.fetchMe()
   }
 
@@ -64,11 +79,20 @@ router.beforeEach(async(to) => {
   }
 
   if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    return isPdaOrMobileDevice() ? {path:'/pda'} : {name: 'dashboard'}
+    return isPdaOrMobileDevice() ? { path: '/pda' } : { name: 'dashboard' }
   }
 
-  if(to.path === '/' && isPdaOrMobileDevice()) {
-    return {path: '/pda'}
+  // Szerepkör-alapú (RBAC) útvonalvédelem
+  const allowedRoles = to.meta.allowedRoles
+  if (allowedRoles && allowedRoles.length > 0) {
+    const userRole = authStore.user?.role
+    if (!userRole || !allowedRoles.includes(userRole)) {
+      return isPdaOrMobileDevice() ? { path: '/pda' } : { name: 'dashboard' }
+    }
+  }
+
+  if (to.path === '/' && isPdaOrMobileDevice()) {
+    return { path: '/pda' }
   }
 })
 

@@ -36,7 +36,7 @@ export class AuthService {
 
     async changePassword(userId: string, dto: ChangePasswordDto){
         const user = await this.prisma.user.findUnique({where: {id: userId}});
-        if(!user){
+        if(!user || !user.isActive){
             throw new UnauthorizedException();
         }
         
@@ -50,9 +50,14 @@ export class AuthService {
             where: {id: userId},
             data: {
                 passwordHash: await bcrypt.hash(dto.newPassword, 10),
-                passwordChangedAt: new Date(),
+                passwordChangedAt: new Date(Date.now() - 1000),
             }
         });
-        return {message: 'Jelszo módositva'};
+
+        const payload = { sub: user.id, email: user.email, role: user.role };
+        return {
+            message: 'Jelszo módositva',
+            accessToken: this.jwtService.sign(payload),
+        };
     }
 }
