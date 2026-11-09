@@ -32,7 +32,7 @@ export class LocationController {
         return location;
     }
 
-    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER)
+    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER, Role.STORE_MANAGER)
     @Post()
     async create(@Body() data: CreateLocationDto, @CurrentUser() user: AuthUser ) {
         if(data.parentId){
@@ -44,7 +44,7 @@ export class LocationController {
         return this.locationService.createLocation(data)
     }
 
-    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER )
+    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER, Role.STORE_MANAGER )
     @Patch(':id')
     async update(@Param('id') id: string,
                  @Body() updateLocation: UpdateLocationDto,
@@ -58,7 +58,7 @@ export class LocationController {
         return this.locationService.update(id, updateLocation);
     }
 
-    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER )
+    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER, Role.STORE_MANAGER )
     @Delete(':id')
     async remove(@Param('id') id: string,
                  @CurrentUser() user: AuthUser,
