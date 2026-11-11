@@ -4,6 +4,7 @@ import { LocationAccessService } from "../location/location-access.service";
 import { AuthUser } from "../auth/decorators/current-user.decorator";
 import { AdjustStockDto } from "./dto/adjust-stock.dto";
 import { SlotMode } from "../generated/prisma/enums";
+import { canSeeCostPrice, excludeCostPrice } from "../common/cost-price";
 
 
 @Injectable()
@@ -13,14 +14,20 @@ export class StockService {
         private locationAccesService: LocationAccessService,
     ){}
 
-    async findAll(user: AuthUser, locationId?: string, variantId?: string){
+    async findAll(
+        user: AuthUser,
+        locationId?: string,
+        variantId?: string,
+        skip?: number,
+        take?: number,
+    ){
         if(locationId){
             await this.locationAccesService.assertCanAccess(user, locationId);
         }
 
         const locationWhere = await this.locationAccesService.accessibleWhere(user);
 
-        return this.prisma.stockItem.findMany({
+        const items = await this.prisma.stockItem.findMany({
             where: {
                 ...(locationId ? { locationId } : { location: locationWhere }),
                 ...(variantId ? { variantId } : {}),
@@ -33,18 +40,34 @@ export class StockService {
                     },}
                 }
             },
+            ...(skip !== undefined ? { skip } : {}),
+            ...(take !== undefined ? { take } : {}),
             orderBy: { updatedAt: 'desc'}
         });
+
+        if (canSeeCostPrice(user.role)) {
+            return items;
+        }
+        return items.map((item) => ({
+            ...item,
+            variant: excludeCostPrice(item.variant),
+        }));
     }
 
-    async findMovements(user: AuthUser, locationId?: string, variantId?: string) {
+    async findMovements(
+        user: AuthUser,
+        locationId?: string,
+        variantId?: string,
+        skip?: number,
+        take = 100,
+    ) {
         if(locationId){
             await this.locationAccesService.assertCanAccess(user, locationId)
         }
 
         const locationWhere = await this.locationAccesService.accessibleWhere(user);
 
-        return this.prisma.stockMovement.findMany({
+        const movements = await this.prisma.stockMovement.findMany({
             where: {
                 ...(locationId ? { locationId } : { location: locationWhere }),
                 ...(variantId ? { variantId } : {}),   
@@ -54,8 +77,18 @@ export class StockService {
                 variant: { include: { product: true}},
                 createdByUser: { select: {id: true, name: true, email: true, role: true}},
             },
+            ...(skip !== undefined ? { skip } : {}),
+            take,
             orderBy: { createdAt: 'desc'}
         });
+
+        if (canSeeCostPrice(user.role)) {
+            return movements;
+        }
+        return movements.map((movement) => ({
+            ...movement,
+            variant: excludeCostPrice(movement.variant),
+        }));
     }
 
 

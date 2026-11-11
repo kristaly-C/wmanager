@@ -18,18 +18,34 @@ export class StockController{
     findAll(
         @CurrentUser() user: AuthUser,
         @Query('locationId') locationId?: string,
-        @Query('variantId') variantId?: string
+        @Query('variantId') variantId?: string,
+        @Query('skip') skip?: string,
+        @Query('take') take?: string,
     ){
-        return this.stockService.findAll(user, locationId, variantId);
+        return this.stockService.findAll(
+            user,
+            locationId,
+            variantId,
+            skip !== undefined ? Number(skip) : undefined,
+            take !== undefined ? Number(take) : undefined,
+        );
     }
 
     @Get('movements')
     findMovements(
         @CurrentUser() user: AuthUser,
         @Query('locationId') locationId?: string,
-        @Query('variantId') variantId?: string
+        @Query('variantId') variantId?: string,
+        @Query('skip') skip?: string,
+        @Query('take') take?: string,
     ){
-        return this.stockService.findMovements(user, locationId, variantId);
+        return this.stockService.findMovements(
+            user,
+            locationId,
+            variantId,
+            skip !== undefined ? Number(skip) : undefined,
+            take !== undefined ? Number(take) : undefined,
+        );
     }
 
     @Roles(Role.ADMIN,

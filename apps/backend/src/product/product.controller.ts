@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ProductService } from "./product.service";
 import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
@@ -14,8 +14,20 @@ export class ProductController {
 
 
     @Get()
-    findAll() {
-        return this.productService.findAll();
+    findAll(
+        @Query('search') search?: string,
+        @Query('categoryId') categoryId?: string,
+        @Query('brandId') brandId?: string,
+        @Query('skip') skip?: string,
+        @Query('take') take?: string,
+    ) {
+        return this.productService.findAllFiltered({
+            search,
+            categoryId,
+            brandId,
+            skip: skip !== undefined ? Number(skip) : undefined,
+            take: take !== undefined ? Number(take) : undefined,
+        });
     }
 
     @Roles(Role.ADMIN,Role.BOSS,Role.WAREHOUSE_MANAGER)
