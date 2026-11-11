@@ -83,7 +83,8 @@ model User {
   role  Role
   passwordHash String
 
-  stocktakeSessions StocktakeSession[]
+  stocktakeSessions StocktakeSession[] @relation("StocktakePerformedBy")
+  approvedStocktakeSessions StocktakeSession[] @relation("StocktakeApprovedBy")
   returnCases ReturnCase[]
   stockMovements StockMovement[]
   userLocations UserLocation[]
@@ -170,6 +171,7 @@ model Variant {
   size   String
   weight Decimal @db.Decimal(10, 3)
   
+  stocktakeItems StocktakeItem[]
   stockItems  StockItem[]
   returnCaseItems ReturnCaseItem[]
   stockMovements StockMovement[]
@@ -268,16 +270,22 @@ model StockTransfer {
 }
 
 model StocktakeSession {
-  id        String @id @default(uuid())
+  id          String            @id         @default(uuid())
   locationId  String
-  location    Location @relation(fields: [locationId], references: [id])
-  status      StocktakeStatus @default(IN_PROGRESS)
+  location    Location          @relation(fields: [locationId], references: [id])
+  status      StocktakeStatus   @default(IN_PROGRESS)
+  note        String?
 
-  startedAt     DateTime @default(now())
+  startedAt     DateTime        @default(now())
   completedAt   DateTime?
   
-  performedByUserId   String
-  performedBy         User @relation(fields: [performedByUserId], references: [id])
+  performedByUserId   String?
+  performedBy         User?      @relation("StocktakePerformedBy", fields: [performedByUserId], references: [id])
+  
+  approvedByUserId String?
+  approvedBy User?              @relation("StocktakeApprovedBy", fields: [approvedByUserId], references: [id])
+  
+  items             StocktakeItem[]
   stockMovements    StockMovement[]
 
   createdAt      DateTime @default(now())
@@ -286,7 +294,26 @@ model StocktakeSession {
   @@index([locationId])
   @@index([performedByUserId])
 }
+model StocktakeItem {
+  id          String        @id @default(uuid())
+  stocktakeSessionId  String
+  stocktakeSession  StocktakeSession  @relation(fields: [stocktakeSessionId], references: [id], onDelete: Cascade)
 
+  variantId   String
+  variant     Variant     @relation(fields: [variantId], references: [id])
+
+  expectedQuantity  Int
+  countedQuantity   Int?
+  discrepancy    Int?
+  note              String?
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([stocktakeSessionId, variantId])
+  @@index([stocktakeSessionId])
+  @@index([variantId])
+}
 
 model ReturnCase {
   id        String @id @default(uuid())
