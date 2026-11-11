@@ -23,6 +23,7 @@ export enum LocationType {
   }
 
   export enum MovementType {
+    INITIAL_STOCK = 'INITIAL_STOCK',
     PURCHASE_RECEIPT = 'PURCHASE_RECEIPT',       // beérkezés beszállítótól
     SALE = 'SALE',                               // eladás (webshop/bolt)
     TRANSFER_OUT = 'TRANSFER_OUT',               // kiszállítás transzferhez

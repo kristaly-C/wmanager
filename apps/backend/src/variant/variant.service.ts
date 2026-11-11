@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { BaseService } from "../common/base.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuthUser } from "../auth/decorators/current-user.decorator";
@@ -20,7 +20,11 @@ export class VariantService extends BaseService<PrismaService['variant']> {
     }
 
     async findAllForUser(user: AuthUser) {
-        const variants = await super.findAll();
+        const variants = await super.findAll({ include: { variantBarcodes: {
+            orderBy: [{ isPrimary: 'desc'},{ createdAt: 'asc'}],
+                }
+            }
+        });
         if (COST_PRICE_ROLES.includes(user.role)) {
             return variants;
         }
@@ -28,7 +32,18 @@ export class VariantService extends BaseService<PrismaService['variant']> {
     }
 
     async findOneForUser(id: string, user: AuthUser) {
-        const variant = await super.findOne(id);
+        const variant = await this.prisma.variant.findUnique({
+            where: {id},
+            include: {
+                variantBarcodes: {
+                    orderBy: [{ isPrimary: 'desc'},{ createdAt: 'asc'}]
+                }
+            }
+        })
+
+        if(!variant){
+            throw new NotFoundException(`Record with id ${id} not found`);
+        }
         if (COST_PRICE_ROLES.includes(user.role)) {
             return variant;
         }
