@@ -6,6 +6,7 @@ import CatalogView from '@/views/CatalogView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import LoginView from '@/views/LoginView.vue'
 import PdaHomeView from '@/views/PdaHomeView.vue'
+import UsersView from '@/views/UsersView.vue'
 import { Role } from '@wmanager/shared-types'
 import { createRouter, createWebHistory } from 'vue-router'
 
@@ -45,6 +46,19 @@ const router = createRouter({
               Role.ADMIN,
               Role.BOSS,
               Role.ORDER_CLERK,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+            ],
+          },
+        },
+        {
+          path: 'users',
+          name: 'users',
+          component: UsersView,
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
               Role.WAREHOUSE_MANAGER,
               Role.STORE_MANAGER,
             ],

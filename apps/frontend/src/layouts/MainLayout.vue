@@ -87,11 +87,12 @@ useQrBadgeScanner(async (qrToken, isBusy) => {
     <header class="w-full max-w-[1440px] mx-auto px-4 sm:px-6 pt-4 pb-2 flex flex-wrap xl:grid xl:grid-cols-3 items-center justify-between gap-3">
       
       <!-- 1. BAL OLDAL: Logó + Munkaterület-választó -->
-      <div class="flex items-center gap-2.5 shrink-0 order-1">
-        <div class="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/25 shrink-0">
-          <i class="pi pi-box text-lg"></i>
-        </div>
-        <span class="font-bold text-xl tracking-tight text-slate-900 hidden sm:inline">WManager</span>
+      <div class="flex items-center gap-3 shrink-0 order-1">
+        <RouterLink to="/" class="flex items-center shrink-0">
+          <!-- Nagyobb képernyőn a teljes logó, egészen kicsin csak az ikon -->
+          <img src="/logo.png" alt="xStorage" class="h-7 w-auto hidden sm:block object-contain" />
+          <img src="/logo-icon.png" alt="xStorage" class="h-7 w-auto sm:hidden object-contain" />
+        </RouterLink>
 
         <!-- Munkaterület-váltó (Select), ha több munkaterülethez is van joga -->
         <Select
