@@ -83,6 +83,7 @@ model User {
   role  Role
   passwordHash String
 
+  qrToken     String? @unique
   stocktakeSessions StocktakeSession[] @relation("StocktakePerformedBy")
   approvedStocktakeSessions StocktakeSession[] @relation("StocktakeApprovedBy")
   returnCases ReturnCase[]

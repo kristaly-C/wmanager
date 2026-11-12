@@ -2,7 +2,10 @@
 import { RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
-import Tag from 'primevue/tag'
+import {ref} from 'vue'
+import MyQrBadgeModal from '@/components/common/MyQrBadgeModal.vue'
+
+const isQrModalOpen = ref(false)
 const authStore = useAuthStore()
 const router = useRouter()
 
@@ -32,6 +35,16 @@ function handleLogout() {
 
       <div class="flex items-center gap-1">
         <Button
+          v-if="authStore.user?.role !== 'ADMIN' && authStore.user?.role !== 'BOSS'"
+          icon="pi pi-qrcode"
+          severity="success"
+          text
+          rounded
+          size="small"
+          title="Saját belépő QR-kód"
+          @click="isQrModalOpen = true"
+        />
+        <Button
           icon="pi pi-desktop"
           severity="secondary"
           text
@@ -56,5 +69,6 @@ function handleLogout() {
     <main class="flex-1 p-4 overflow-y-auto">
       <RouterView />
     </main>
+    <MyQrBadgeModal v-model:visible="isQrModalOpen" />
   </div>
 </template>

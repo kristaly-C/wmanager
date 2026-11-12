@@ -9,6 +9,9 @@ import Password from 'primevue/password'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 
+import { useQrBadgeScanner } from '@/composables/useQrBadgeScanner'
+import { isPdaOrMobileDevice } from '@/utils/device'
+
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -39,6 +42,22 @@ async function handleLogin() {
     isLoading.value = false
   }
 }
+
+
+useQrBadgeScanner(async (qrToken) => {
+  errorMessage.value = ''
+  isLoading.value = true
+
+  try{
+    await authStore.loginWithQr(qrToken)
+    router.push(isPdaOrMobileDevice() ? '/pda' : '/')
+  }catch ( error: any) {
+    errorMessage.value = error.response?.data?.message || 'Érvénytelen vagy nem engedélyezett QR-kód.'
+  }finally {
+    isLoading.value = false
+  }
+
+})
 </script>
 
 <template>
@@ -95,6 +114,10 @@ async function handleLogin() {
           class="mt-2 w-full"
         />
       </form>
+      <div class="mt-6 pt-5 border-t border-slate-800 flex items-center justify-center gap-2 text-xs text-slate-400">
+        <i class="pi pi-qrcode text-emerald-400 text-base"></i>
+        <span>Raktári gyorsbelépéshez olvasd le a QR-kódodat!</span>
+      </div>
     </div>
   </div>
 </template>

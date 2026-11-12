@@ -103,8 +103,8 @@ export class UserService extends BaseService<PrismaService['user']> {
     return this.excludePassword(updated);
   }
 
-  private excludePassword(user: { passwordHash: string; [key: string]: any}) {
-    const { passwordHash, ...rest } = user;
+  private excludePassword(user: { passwordHash: string; qrToken?: string | null; [key: string]: any}) {
+    const { passwordHash, qrToken, ...rest } = user;
     return rest;
   }
 

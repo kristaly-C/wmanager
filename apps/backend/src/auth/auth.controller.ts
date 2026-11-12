@@ -5,6 +5,7 @@ import { LoginDto } from "./dto/login.dto";
 import { AuthUser, CurrentUser } from "./decorators/current-user.decorator";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { QrLoginDto } from "./dto/qr-login.dto";
 
 @Controller('auth')
 export class AuthController {
@@ -27,5 +28,25 @@ export class AuthController {
     @Patch('password')
     changePassword(@CurrentUser() actor: AuthUser, @Body() dto: ChangePasswordDto) {
         return this.authService.changePassword(actor.userId, dto);
+    }
+
+    @Throttle({ default: {limit: 15, ttl: 60000}})
+    @Post('qr-login')
+    loginWithQr(@Body() dto: QrLoginDto) {
+        return this.authService.loginWithQr(dto);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('my-qr')
+    getMyQr(@CurrentUser() actor: AuthUser){
+        return this.authService.getMyQrToken(actor.userId);
+    }
+
+
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @UseGuards(JwtAuthGuard)
+    @Post('my-qr/regenerate')
+    regenerateMyQr(@CurrentUser() actor: AuthUser) {
+        return this.authService.regenerateQrToken(actor.userId);
     }
 }
