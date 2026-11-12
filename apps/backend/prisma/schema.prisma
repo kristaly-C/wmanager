@@ -66,6 +66,7 @@ enum SalesOrderStatus {
 }
 
 enum MovementType {
+  INITIAL_STOCK
   PURCHASE_RECEIPT
   SALE
   TRANSFER_IN
@@ -82,7 +83,9 @@ model User {
   role  Role
   passwordHash String
 
-  stocktakeSessions StocktakeSession[]
+  qrToken     String? @unique
+  stocktakeSessions StocktakeSession[] @relation("StocktakePerformedBy")
+  approvedStocktakeSessions StocktakeSession[] @relation("StocktakeApprovedBy")
   returnCases ReturnCase[]
   stockMovements StockMovement[]
   userLocations UserLocation[]
@@ -105,6 +108,8 @@ model Category {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([parentId])
 }
 
 model Product {
@@ -117,7 +122,7 @@ model Product {
    manufacturerCode String
    functionality String?
    variants Variant[]
-   vatRate Decimal
+   vatRate Decimal @db.Decimal(5, 2)
   
    primarySupplierId String
    primarySupplier Supplier @relation(fields: [primarySupplierId], references: [id])
@@ -134,6 +139,12 @@ model Product {
    isActive Boolean @default(true)
    createdAt DateTime @default(now())
    updatedAt DateTime @updatedAt 
+
+   @@index([categoryId])
+   @@index([brandId])
+   @@index([primarySupplierId])
+   @@index([name])
+   @@index([manufacturerCode])
 }
 
 
@@ -159,19 +170,22 @@ model Variant {
   sku    String @unique
   colors String[]
   size   String
-  weight Decimal
+  weight Decimal @db.Decimal(10, 3)
   
+  stocktakeItems StocktakeItem[]
   stockItems  StockItem[]
   returnCaseItems ReturnCaseItem[]
   stockMovements StockMovement[]
   variantBarcodes VariantBarcode[]
 
-  price     Decimal
-  costPrice Decimal
+  price     Decimal @db.Decimal(12, 2)
+  costPrice Decimal @db.Decimal(12, 2)
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([productId])
 }
 
 model Location {
@@ -197,6 +211,8 @@ model Location {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([parentId])
 }
 
 model StockItem {
@@ -216,6 +232,7 @@ model StockItem {
   updatedAt DateTime @updatedAt
 
   @@unique([variantId, locationId])
+  @@index([locationId])
 }
 
 model PurchaseOrder {
@@ -229,6 +246,8 @@ model PurchaseOrder {
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([supplierId])
 }
 
 
@@ -246,25 +265,56 @@ model StockTransfer {
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([fromLocationId])
+  @@index([toLocationId])
 }
 
 model StocktakeSession {
-  id        String @id @default(uuid())
+  id          String            @id         @default(uuid())
   locationId  String
-  location    Location @relation(fields: [locationId], references: [id])
-  status      StocktakeStatus @default(IN_PROGRESS)
+  location    Location          @relation(fields: [locationId], references: [id])
+  status      StocktakeStatus   @default(IN_PROGRESS)
+  note        String?
 
-  startedAt     DateTime @default(now())
+  startedAt     DateTime        @default(now())
   completedAt   DateTime?
   
-  performedByUserId   String
-  performedBy         User @relation(fields: [performedByUserId], references: [id])
+  performedByUserId   String?
+  performedBy         User?      @relation("StocktakePerformedBy", fields: [performedByUserId], references: [id])
+  
+  approvedByUserId String?
+  approvedBy User?              @relation("StocktakeApprovedBy", fields: [approvedByUserId], references: [id])
+  
+  items             StocktakeItem[]
   stockMovements    StockMovement[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-}
 
+  @@index([locationId])
+  @@index([performedByUserId])
+}
+model StocktakeItem {
+  id          String        @id @default(uuid())
+  stocktakeSessionId  String
+  stocktakeSession  StocktakeSession  @relation(fields: [stocktakeSessionId], references: [id], onDelete: Cascade)
+
+  variantId   String
+  variant     Variant     @relation(fields: [variantId], references: [id])
+
+  expectedQuantity  Int
+  countedQuantity   Int?
+  discrepancy    Int?
+  note              String?
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([stocktakeSessionId, variantId])
+  @@index([stocktakeSessionId])
+  @@index([variantId])
+}
 
 model ReturnCase {
   id        String @id @default(uuid())
@@ -285,13 +335,15 @@ model ReturnCase {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([handledByUserId])
 }
 
 model ReturnCaseItem {
   id           String @id @default(uuid())
 
   returnCaseId String
-  returnCase   ReturnCase @relation(fields: [returnCaseId], references: [id])
+  returnCase   ReturnCase @relation(fields: [returnCaseId], references: [id], onDelete: Cascade)
 
   variantId    String
   variant      Variant @relation(fields: [variantId], references: [id])
@@ -299,6 +351,9 @@ model ReturnCaseItem {
   quantity     Int
 
   createdAt    DateTime @default(now())
+
+  @@index([returnCaseId])
+  @@index([variantId])
 }
 
 model SalesOrder {
@@ -337,18 +392,23 @@ model StockMovement {
 
   createdAt DateTime @default(now())
 
+  @@index([locationId, createdAt])
+  @@index([variantId, createdAt])
+  @@index([createdByUserId])
 }
 
 model VariantBarcode {
   id        String @id @default(uuid())
   variantId String
-  variant   Variant @relation(fields: [variantId], references: [id])
+  variant   Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
   barcode   String @unique
   isPrimary Boolean @default(false)
   note      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([variantId])
 }
 
 model Brand {
@@ -371,4 +431,5 @@ model UserLocation {
   createdAt DateTime @default(now())
 
   @@unique([userId, locationId])
+  @@index([locationId])
 }

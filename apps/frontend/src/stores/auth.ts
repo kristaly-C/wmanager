@@ -8,6 +8,7 @@ export interface AuthUser {
   userId?: string
   id?: string
   email: string
+  name?: string
   role: Role
 }
 
@@ -58,6 +59,26 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('token')
   }
 
+  async function verifyQrToken(qrToken:string) {
+    const response = await apiClient.post<{ accessToken: string; user: AuthUser }>(
+      '/auth/qr-login',
+      {qrToken},
+    )
+    return response.data
+  }
+
+  function applySession(newToken: string, newUser: AuthUser){
+    token.value = newToken
+    localStorage.setItem('token', newToken)
+    user.value = newUser
+  }
+
+  async function loginWithQr(qrToken: string) {
+    const data = await verifyQrToken(qrToken)
+    applySession(data.accessToken, data.user)
+    return data.user
+  }
+
   return {
     token,
     user,
@@ -66,5 +87,8 @@ export const useAuthStore = defineStore('auth', () => {
     fetchMe,
     login,
     logout,
+    verifyQrToken,
+    applySession,
+    loginWithQr,
   }
 })

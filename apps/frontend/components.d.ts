@@ -11,13 +11,14 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    Drawer: typeof import('primevue/drawer')['default']
+    Button: typeof import('primevue/button')['default']
+    Dialog: typeof import('primevue/dialog')['default']
     GlobalProductSearch: typeof import('./src/components/common/GlobalProductSearch.vue')['default']
-    InputText: typeof import('primevue/inputtext')['default']
+    Message: typeof import('primevue/message')['default']
+    MyQrBadgeModal: typeof import('./src/components/common/MyQrBadgeModal.vue')['default']
     PageHeader: typeof import('./src/components/common/PageHeader.vue')['default']
+    ProductsTab: typeof import('./src/components/catalog/ProductsTab.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    Select: typeof import('primevue/select')['default']
-    Tag: typeof import('primevue/tag')['default']
   }
 }

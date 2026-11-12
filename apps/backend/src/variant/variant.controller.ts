@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { VariantService } from "./variant.service";
 import { CreateVariantDto } from "./dto/create-variant.dto";
 import { UpdateVariantDto } from "./dto/update-variant.dto";
@@ -15,8 +15,19 @@ export class VariantController {
     constructor(private variantService: VariantService) {}
 
     @Get()
-    findAll(@CurrentUser() user: AuthUser) {
-        return this.variantService.findAllForUser(user);
+    findAll(
+        @CurrentUser() user: AuthUser,
+        @Query('search') search?: string,
+        @Query('productId') productId?: string,
+        @Query('skip') skip?: string,
+        @Query('take') take?: string,
+    ) {
+        return this.variantService.findAllForUser(user, {
+            search,
+            productId,
+            skip: skip !== undefined ? Number(skip) : undefined,
+            take: take !== undefined ? Number(take) : undefined,
+        });
     }
 
     @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER)

@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { BaseService } from '../common/base.service';
@@ -21,18 +21,42 @@ export class UserService extends BaseService<PrismaService['user']> {
     const passwordHash = await bcrypt.hash(data.password, 10);
     const { password, ...rest } = data;
 
-    const user = await super.create({ ...rest, passwordHash });
+    const user = await this.prisma.user.create({
+      data: { ...rest, passwordHash },
+      include: {
+        userLocations: {
+          include: { location: true },
+        },
+      },
+    });
     return this.excludePassword(user);
-  
   }
 
   async findAll(args?: Parameters<PrismaService['user']['findMany']>[0]) {
-    const users = await super.findAll(args);
+    const users = await super.findAll({
+      include: {
+        userLocations: {
+          include: { location: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      ...args,
+    });
     return users.map((u: UserModel) => this.excludePassword(u));
   }
 
   async findOne(id: string) {
-    const user = await super.findOne(id);
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        userLocations: {
+          include: { location: true },
+        },
+      },
+    });
+    if (!user) {
+      throw new NotFoundException(`Record with id ${id} not found`);
+    }
     return this.excludePassword(user);
   }
 
@@ -99,12 +123,20 @@ export class UserService extends BaseService<PrismaService['user']> {
       }
     }
 
-    const updated = await this.prisma.user.update({ where: { id }, data });
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data,
+      include: {
+        userLocations: {
+          include: { location: true },
+        },
+      },
+    });
     return this.excludePassword(updated);
   }
 
-  private excludePassword(user: { passwordHash: string; [key: string]: any}) {
-    const { passwordHash, ...rest } = user;
+  private excludePassword(user: { passwordHash: string; qrToken?: string | null; [key: string]: any}) {
+    const { passwordHash, qrToken, ...rest } = user;
     return rest;
   }
 

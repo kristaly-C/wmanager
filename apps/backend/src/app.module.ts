@@ -11,6 +11,8 @@ import { AuthModule } from './auth/auth.module';
 import { VariantModule } from './variant/variant.module';
 import { BrandModule } from './brand/brand.module';
 import { LocationModule } from './location/location.module';
+import { StockModule } from './stock/stock.module';
+import { StocktakeModule } from './stocktake/stocktake.module';
 
 function validateEnv(config: Record<string, unknown>) {
     const databaseUrl = config.DATABASE_URL;
@@ -53,6 +55,8 @@ function validateEnv(config: Record<string, unknown>) {
         VariantModule,
         BrandModule,
         LocationModule,
+        StockModule,
+        StocktakeModule
     ],
     controllers: [],
     providers: [

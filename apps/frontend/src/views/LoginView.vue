@@ -9,6 +9,9 @@ import Password from 'primevue/password'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 
+import { useQrBadgeScanner } from '@/composables/useQrBadgeScanner'
+import { isPdaOrMobileDevice } from '@/utils/device'
+
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -39,23 +42,36 @@ async function handleLogin() {
     isLoading.value = false
   }
 }
+
+
+useQrBadgeScanner(async (qrToken) => {
+  errorMessage.value = ''
+  isLoading.value = true
+
+  try{
+    await authStore.loginWithQr(qrToken)
+    router.push(isPdaOrMobileDevice() ? '/pda' : '/')
+  }catch ( error: any) {
+    errorMessage.value = error.response?.data?.message || 'Érvénytelen vagy nem engedélyezett QR-kód.'
+  }finally {
+    isLoading.value = false
+  }
+
+})
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-    <!-- Bejelentkező kártya -->
-    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+  <div class="min-h-screen bg-[#F3F4F6] flex items-center justify-center p-4">
+    <!-- Bejelentkező kártya (Bento fehér stílusban) -->
+    <div class="w-full max-w-md bg-white border border-white rounded-3xl p-8 sm:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
       
       <!-- Fejléc / Logó -->
       <div class="text-center mb-8">
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 mb-4">
-          <i class="pi pi-box text-2xl"></i>
-        </div>
-        <h1 class="text-2xl font-bold text-white">WManager</h1>
-        <p class="text-slate-400 text-sm mt-1">Jelentkezz be a raktárkezelő rendszerbe</p>
+        <img src="/logo.png" alt="xStorage" class="h-9 w-auto mx-auto mb-3 object-contain" />
+        <p class="text-slate-400 text-sm">Jelentkezz be a raktárkezelő rendszerbe</p>
       </div>
 
-      <!-- Hibaüzenet, ha elrontotta a jelszót -->
+      <!-- Hibaüzenet -->
       <Message v-if="errorMessage" severity="error" :closable="false" class="mb-6">
         {{ errorMessage }}
       </Message>
@@ -63,19 +79,20 @@ async function handleLogin() {
       <!-- Bejelentkező űrlap -->
       <form @submit.prevent="handleLogin" class="flex flex-col gap-5">
         <div class="flex flex-col gap-2">
-          <label for="email" class="text-sm font-medium text-slate-300">E-mail cím</label>
+          <label for="email" class="text-xs font-bold uppercase tracking-wider text-slate-500">E-mail cím</label>
           <InputText
             id="email"
             v-model="email"
             type="email"
-            placeholder="pelda@wmanager.hu"
+            placeholder="pelda@shox.hu"
             required
             fluid
+            class="!rounded-xl"
           />
         </div>
 
         <div class="flex flex-col gap-2">
-          <label for="password" class="text-sm font-medium text-slate-300">Jelszó</label>
+          <label for="password" class="text-xs font-bold uppercase tracking-wider text-slate-500">Jelszó</label>
           <Password
             inputId="password"
             v-model="password"
@@ -84,6 +101,7 @@ async function handleLogin() {
             placeholder="••••••••"
             required
             fluid
+            inputClass="!rounded-xl"
           />
         </div>
 
@@ -92,7 +110,7 @@ async function handleLogin() {
           label="Bejelentkezés"
           icon="pi pi-sign-in"
           :loading="isLoading"
-          class="mt-2 w-full"
+          class="mt-2 w-full !bg-slate-900 hover:!bg-slate-800 !border-none !rounded-xl !py-3 !text-white font-semibold shadow-md"
         />
       </form>
     </div>
