@@ -13,6 +13,37 @@ export interface LocationItem {
   updatedAt: string
 }
 
+export interface BulkLocationItemPayload {
+  name: string
+  description?: string
+  type: LocationType
+  slotMode?: SlotMode
+  isActive?: boolean
+  children?: BulkLocationItemPayload[]
+}
+
+export interface BulkCreateLocationsPayload {
+  parentId: string
+  skipDuplicates?: boolean
+  items?: BulkLocationItemPayload[]
+  type?: LocationType
+  prefix?: string
+  suffix?: string
+  start?: number
+  end?: number
+  padLength?: number
+  slotMode?: SlotMode
+  description?: string
+  isActive?: boolean
+}
+
+export interface BulkCreateLocationsResult {
+  createdCount: number
+  skippedCount: number
+  created: LocationItem[]
+  skippedNames: string[]
+}
+
 export const locationApi = {
   getAll: () => apiClient.get<LocationItem[]>('/locations'),
   getOne: (id: string) => apiClient.get<LocationItem>(`/locations/${id}`),
@@ -24,11 +55,13 @@ export const locationApi = {
     slotMode?: SlotMode
     isActive?: boolean
   }) => apiClient.post<LocationItem>('/locations', data),
+  bulkCreate: (data: BulkCreateLocationsPayload) =>
+    apiClient.post<BulkCreateLocationsResult>('/locations/bulk', data),
   update: (
     id: string,
     data: {
       name?: string
-      description?: string
+      description?: string | null
       parentId?: string | null
       slotMode?: SlotMode | null
       isActive?: boolean

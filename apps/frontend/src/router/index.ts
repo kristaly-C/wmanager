@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { isPdaOrMobileDevice } from '@/utils/device'
 import CatalogView from '@/views/CatalogView.vue'
 import DashboardView from '@/views/DashboardView.vue'
+import InventoryView from '@/views/InventoryView.vue'
 import LoginView from '@/views/LoginView.vue'
 import PdaHomeView from '@/views/PdaHomeView.vue'
 import UsersView from '@/views/UsersView.vue'
@@ -36,6 +37,22 @@ const router = createRouter({
           path: '',
           name: 'dashboard',
           component: DashboardView,
+        },
+        {
+          path: 'inventory',
+          name: 'inventory',
+          component: InventoryView,
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+              Role.ORDER_CLERK,
+            ],
+          },
         },
         {
           path: 'catalog',

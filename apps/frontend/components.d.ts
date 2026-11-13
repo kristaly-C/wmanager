@@ -14,6 +14,8 @@ declare module 'vue' {
     Button: typeof import('primevue/button')['default']
     Dialog: typeof import('primevue/dialog')['default']
     GlobalProductSearch: typeof import('./src/components/common/GlobalProductSearch.vue')['default']
+    LocationBulkModal: typeof import('./src/components/inventory/LocationBulkModal.vue')['default']
+    LocationFormModal: typeof import('./src/components/inventory/LocationFormModal.vue')['default']
     Message: typeof import('primevue/message')['default']
     MyQrBadgeModal: typeof import('./src/components/common/MyQrBadgeModal.vue')['default']
     PageHeader: typeof import('./src/components/common/PageHeader.vue')['default']

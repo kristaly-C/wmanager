@@ -42,6 +42,7 @@ export const WORKSPACES: WorkspaceConfig[] = [
     navItems: [
       { label: 'Áttekintés', icon: 'pi pi-home', to: '/' },
       { label: 'Katalógus', icon: 'pi pi-tags', to: '/catalog' }, // Később '/catalog' al-fülekkel
+      { label: 'Lokációk', icon: 'pi pi-sitemap', to: '/inventory' },
       { label: 'Beszerzés', icon: 'pi pi-shopping-cart', to: '/purchase-orders' },
       { label: 'Áruszétosztás', icon: 'pi pi-arrows-h', to: '/transfers' },
     ],
