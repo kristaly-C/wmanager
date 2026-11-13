@@ -85,6 +85,7 @@ useQrBadgeScanner(async (qrToken) => {
             v-model="email"
             type="email"
             placeholder="pelda@shox.hu"
+            autofocus
             required
             fluid
             class="!rounded-xl"

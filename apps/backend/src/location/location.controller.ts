@@ -9,6 +9,7 @@ import { RolesGuard } from "../auth/guards/roles.guard";
 import { LocationAccessService } from "./location-access.service";
 import { AuthUser, CurrentUser } from "../auth/decorators/current-user.decorator";
 import { LOCATION_UNBOUND_ROLES } from "../common/location-scope";
+import { BulkCreateLocationsDto } from "./dto/bulk-create-locations.dto";
 
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,7 +23,7 @@ export class LocationController {
     @Get()
     async findAll(@CurrentUser() user: AuthUser) {
         const where = await this.locationAccessService.accessibleWhere(user);
-        return this.locationService.findAll({ where });
+        return this.locationService.findAll({ where, orderBy: { name: 'asc' } });
     }
 
     @Get(':id')
@@ -42,6 +43,13 @@ export class LocationController {
         }
         
         return this.locationService.createLocation(data)
+    }
+
+    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER, Role.STORE_MANAGER)
+    @Post('bulk')
+    async bulkCreate(@Body() data: BulkCreateLocationsDto, @CurrentUser() user: AuthUser) {
+        await this.locationAccessService.assertCanAccess(user, data.parentId);
+        return this.locationService.bulkCreateLocations(data);
     }
 
     @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER, Role.STORE_MANAGER )
