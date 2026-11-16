@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } f
 import { VariantService } from "./variant.service";
 import { CreateVariantDto } from "./dto/create-variant.dto";
 import { UpdateVariantDto } from "./dto/update-variant.dto";
+import { BulkCreateVariantsDto } from "./dto/bulk-create-variants.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -34,6 +35,12 @@ export class VariantController {
     @Post()
     create(@Body() createVariantDto: CreateVariantDto){
         return this.variantService.create(createVariantDto);
+    }
+
+    @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER)
+    @Post('bulk')
+    bulkCreate(@Body() bulkCreateVariantsDto: BulkCreateVariantsDto) {
+        return this.variantService.bulkCreate(bulkCreateVariantsDto);
     }
 
     @Get(':id')

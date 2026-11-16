@@ -2,13 +2,13 @@
 
 > Ez a dokumentum az MVP (Minimum Viable Product) fejlesztési sorrendjét és aktuális készültségi állapotát követi nyomon. Minden lezárt részfeladatnál pipáld ki (`[x]`) az adott sort, és frissítsd az „Aktuális fókusz” részt.
 >
-> Utolsó frissítés: 2026-11-13
+> Utolsó frissítés: 2026-11-16
 
 ---
 
 ## Aktuális fókusz
 
-- **Következő lépés:** **2. Mérföldkő – Katalógus és Termékek kezelése** (`ProductsTab.vue`, `CategoriesView.vue`, `Brands`, `Suppliers`, `Variant` + `VariantBarcode` UI)
+- **Következő lépés:** **3/B. Bevételezés beérkezett áruhoz (PurchaseOrder)** (Prisma séma-bővítés `PurchaseOrderItem`-mel, shared-types, backend modul és frontend bevételezés nézet)
 - **MVP célok röviden:**
   1. Raktár és pozíciók (`WAREHOUSE` / `STORE` → `ZONE` → `SHELF` → `BIN`) könnyű létrehozása és kezelése.
   2. Termékek, variánsok és vonalkódok kezelése.
@@ -32,8 +32,8 @@
 - [x] Bejelentkezés + QR-kódos raktári átjelentkezés (`LoginView.vue`, `MainLayout.vue`, `MyQrBadgeModal.vue`)
 - [x] Felhasználók kezelése és lokációhoz rendelése (`UsersView.vue`)
 - [x] Lokáció API kliens (`src/api/locations.ts`)
-- [x] Kategóriák alap lista (`CategoriesView.vue` – létrehozás/szerkesztés dialógus még hátravan)
-- [x] Katalógus és termékadatlap UI váz (`CatalogView.vue`, `ProductsTab.vue` – jelenleg mintaadatokkal)
+- [x] Kategóriák kezelése (`CategoriesView.vue` – teljes CRUD hierarchia-választással)
+- [x] Katalógus és termékadatlap (`CatalogView.vue`, `ProductsTab.vue`, `BrandsTab.vue`, `SuppliersTab.vue`)
 
 ---
 
@@ -60,16 +60,18 @@
 
 ### Backend (`apps/backend`)
 - [x] `Brand`, `Category`, `Supplier`, `Product`, `Variant`, `VariantBarcode` végpontok
-- [ ] Ellenőrzés: a `Product` lista válasz tartalmazza-e a `total` elemszámot a `:lazy="true"` PrimeVue lapozáshoz (ha szükséges, `{ items, total }` bővítés)
+- [x] Ellenőrzés: a `Product` lista válasz tartalmazza-e a `total` elemszámot a `:lazy="true"` PrimeVue lapozáshoz (ha szükséges, `{ items, total }` bővítés)
+- [x] Variáns színváltozat képek (`Variant.imageUrls` mező, Prisma migráció, DTO validáció, és `bulkCreate` támogatás)
 
 ### Frontend (`apps/frontend`)
-- [ ] Frontend API kliensek létrehozása (`products.ts`, `variants.ts`, `brands.ts`, `suppliers.ts`)
-- [ ] `CategoriesView.vue` kiegészítése létrehozás / szerkesztés / törlés dialógussal (fa/szülő választással)
-- [ ] `Brands` és `Suppliers` fülek megvalósítása a `CatalogView.vue`-ban (jelenleg placeholder)
-- [ ] `ProductsTab.vue` bekötése valódi API-ra (mintaadatok kiváltása, szerveroldali keresés ~300 ms debounce-szal és lapozással)
-- [ ] Termék létrehozása / szerkesztése modal
-- [ ] Variánsok CRUD a termékadatlapon (szín, méret, SKU, ár, `costPrice` szerepkör szerinti elrejtésével)
-- [ ] Vonalkódok kezelése variánsonként (`VariantBarcode` hozzáadása, elsődleges jelölés, törlés)
+- [x] Frontend API kliensek létrehozása (`products.ts`, `variants.ts`, `brands.ts`, `suppliers.ts`)
+- [x] `CategoriesView.vue` kiegészítése létrehozás / szerkesztés / törlés dialógussal (fa/szülő választással)
+- [x] `Brands` és `Suppliers` fülek megvalósítása a `CatalogView.vue`-ban (jelenleg placeholder)
+- [x] `ProductsTab.vue` bekötése valódi API-ra (mintaadatok kiváltása, szerveroldali keresés ~300 ms debounce-szal és lapozással)
+- [x] Termék létrehozása / szerkesztése modal
+- [x] Variánsok CRUD a termékadatlapon (szín, méret, SKU, ár, `costPrice` szerepkör szerinti elrejtésével)
+- [x] Variáns színváltozat képek (`imageUrls`) szerkesztése (`VariantFormModal.vue`), Hero színváltozat galéria + variánstábla miniatűrök (`ProductsTab.vue`), és `GlobalProductSearch.vue` előnézet
+- [x] Vonalkódok kezelése variánsonként (`VariantBarcode` hozzáadása, elsődleges jelölés, törlés)
 
 ---
 
@@ -78,11 +80,15 @@
 **Cél:** Termékek felvitele konkrét pozíciókra, raktári készlet áttekintése pozíciónként, valamint beérkező áru bevételezése.
 
 ### 3/A. Pozíció szerinti készlet (`StockItem` & `StockMovement`)
-- [ ] Frontend `stock.ts` API kliens (`/stock`, `/stock/movements`, `/stock/adjust`)
-- [ ] Készletlista nézet lokáció / pozíció és termék / variáns szerinti szerveroldali szűréssel (`quantity`, `reservedQuantity`, elérhető: `quantity - reservedQuantity`)
-- [ ] Gyors *„Készlet felvitele pozícióra / korrekció”* művelet (`INITIAL_STOCK` / `MANUAL_CORRECTION`), vonalkód- vagy SKU-kereséssel
-- [ ] A `ProductsTab.vue` *„Készlet”* al-fülének bekötése (mutassa, melyik pozíción hány darab van az adott termék variánsaiból)
-- [ ] Készletmozgási napló (`/movements`) megjelenítése
+- [x] Frontend `stock.ts` API kliens (`/stock`, `/stock/movements`, `/stock/adjust`)
+- [x] Készletlista nézet lokáció / pozíció és termék / variáns szerinti szerveroldali szűréssel (`quantity`, `reservedQuantity`, elérhető: `quantity - reservedQuantity`)
+- [x] Gyors *„Készlet felvitele pozícióra / korrekció”* művelet (`INITIAL_STOCK` / `MANUAL_CORRECTION`), vonalkód- vagy SKU-kereséssel
+- [x] A `ProductsTab.vue` *„Készlet”* al-fülének bekötése (mutassa, melyik pozíción hány darab van az adott termék variánsaiból)
+- [x] Készletmozgási napló (`/movements`) megjelenítése
+- [x] Kereszt-telephelyi készlet betekintés (cross-location stock visibility): nem hozzárendelt telephelyek gyökér szintű (`WAREHOUSE`/`STORE`) aggregált olvasása és szűrése read-only módban (`isAssigned: false`, `isExternalLocation: true`), írási műveletek és belső zónák/polcok szigorú védelmével mindkét rétegben
+- [x] Raktáron belüli pozíció-áthelyezés (`POST /stock/relocate`, `TRANSFER_OUT` + `TRANSFER_IN` `$transaction`-ben, `DEDICATED` védelem és 3-lépéses pozíció-áthelyező varázsló a `StockAdjustModal.vue`-ban)
+- [x] BOSS / ADMIN nyitókészlet-felvitel kapcsoló (`SystemSetting.initialStockEnabled`, `GET/PATCH /stock/settings`, backend tiltás ha inaktív, és vezérlőpulti toggle kártya a `DashboardView.vue`-ban)
+- [x] Polckészlet hiány és eltérés-jelentés (`StockReport` modell, `POST /stock/reports`, vezetői elbírálás `resolveReport` atomi készlet- és mozgásszinkronnal, `InventoryView.vue` 4. fül jelvénnyel, `F5` gyorsjelentés a `GlobalProductSearch.vue`-ban, és vezérlőpulti widget)
 
 ### 3/B. Bevételezés beérkezett áruhoz (`PurchaseOrder`)
 > **Elkerülhetetlen séma-bővítés:** a `prisma/schema.prisma`-ban a `PurchaseOrder` jelenleg csak fejléc (`supplierId`, `status`), még nincs hozzá `PurchaseOrderItem` tábla és NestJS modul.

@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    BrandsTab: typeof import('./src/components/catalog/BrandsTab.vue')['default']
     Button: typeof import('primevue/button')['default']
     Dialog: typeof import('primevue/dialog')['default']
     GlobalProductSearch: typeof import('./src/components/common/GlobalProductSearch.vue')['default']
@@ -19,8 +20,17 @@ declare module 'vue' {
     Message: typeof import('primevue/message')['default']
     MyQrBadgeModal: typeof import('./src/components/common/MyQrBadgeModal.vue')['default']
     PageHeader: typeof import('./src/components/common/PageHeader.vue')['default']
+    ProductFormModal: typeof import('./src/components/catalog/ProductFormModal.vue')['default']
     ProductsTab: typeof import('./src/components/catalog/ProductsTab.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StockAdjustModal: typeof import('./src/components/inventory/StockAdjustModal.vue')['default']
+    StockItemsTab: typeof import('./src/components/inventory/StockItemsTab.vue')['default']
+    StockMovementsTab: typeof import('./src/components/inventory/StockMovementsTab.vue')['default']
+    StockReportModal: typeof import('./src/components/inventory/StockReportModal.vue')['default']
+    StockReportsTab: typeof import('./src/components/inventory/StockReportsTab.vue')['default']
+    SuppliersTab: typeof import('./src/components/catalog/SuppliersTab.vue')['default']
+    VariantBarcodesModal: typeof import('./src/components/catalog/VariantBarcodesModal.vue')['default']
+    VariantFormModal: typeof import('./src/components/catalog/VariantFormModal.vue')['default']
   }
 }

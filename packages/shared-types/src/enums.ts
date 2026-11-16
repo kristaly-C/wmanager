@@ -60,3 +60,9 @@ export enum LocationType {
     COMPLETED = 'COMPLETED',
     CANCELLED = 'CANCELLED',
   }
+
+  export enum StockReportStatus {
+    PENDING = 'PENDING',
+    APPROVED = 'APPROVED',
+    REJECTED = 'REJECTED',
+  }

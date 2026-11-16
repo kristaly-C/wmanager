@@ -3,7 +3,8 @@ import { LocationService } from "./location.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CreateLocationDto } from "./dto/create-location.dto";
 import { Roles } from "../auth/decorators/roles.decorator";
-import { Role } from "../generated/prisma/enums";
+import { LocationType, Role } from "../generated/prisma/enums";
+import { LocationModel } from "../generated/prisma/models";
 import { UpdateLocationDto } from "./dto/update-location.dto";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { LocationAccessService } from "./location-access.service";
@@ -22,15 +23,34 @@ export class LocationController {
 
     @Get()
     async findAll(@CurrentUser() user: AuthUser) {
-        const where = await this.locationAccessService.accessibleWhere(user);
-        return this.locationService.findAll({ where, orderBy: { name: 'asc' } });
+        const scope = await this.locationAccessService.getScopeContext(user);
+        if (scope.isUnbound) {
+            const locations = await this.locationService.findAll({ orderBy: { name: 'asc' } });
+            return locations.map((loc: LocationModel) => ({ ...loc, isAssigned: true }));
+        }
+
+        const accessibleIdList = Array.from(scope.accessibleIds);
+        const where = {
+            OR: [
+                ...(accessibleIdList.length > 0 ? [{ id: { in: accessibleIdList } }] : []),
+                { type: { in: [LocationType.WAREHOUSE, LocationType.STORE] } },
+            ],
+        };
+        const locations = await this.locationService.findAll({ where, orderBy: { name: 'asc' } });
+        return locations.map((loc: LocationModel) => ({
+            ...loc,
+            isAssigned: scope.isAssigned(loc.id),
+        }));
     }
 
     @Get(':id')
     async findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
         const location = await this.locationService.findOne(id);
-        await this.locationAccessService.assertCanAccess(user, id);
-        return location;
+        const canAccess = await this.locationAccessService.canAccess(user, id);
+        if (!canAccess && location.type !== LocationType.WAREHOUSE && location.type !== LocationType.STORE) {
+            throw new ForbiddenException('Ehhez a helyhez nincs hozzáférésed');
+        }
+        return { ...location, isAssigned: canAccess };
     }
 
     @Roles(Role.ADMIN, Role.BOSS, Role.WAREHOUSE_MANAGER, Role.STORE_MANAGER)

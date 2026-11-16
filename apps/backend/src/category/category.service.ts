@@ -56,6 +56,10 @@ export class CategoryService extends BaseService<PrismaService['category']> {
         return super.create(data);
     }
 
+    findAll(){
+        return super.findAll({orderBy: { name: 'asc'}});
+    }
+
     async update(id: string, data: UpdateCategoryDto) {
         await this.findOne(id);
         if (data.parentId) {
@@ -74,7 +78,7 @@ export class CategoryService extends BaseService<PrismaService['category']> {
 
         const productCount = await this.prisma.product.count({ where: { categoryId: id } });
         if (productCount > 0) {
-            throw new ConflictException('Cannot delete a category that still has products');
+            throw new ConflictException('Nem törölhető olyan kategória, amelyhez még tartoznak termékek');
         }
         return this.prisma.category.delete({ where: { id } });
     }

@@ -1,17 +1,22 @@
-import apiClient from "./axios"
-
+import apiClient from './axios'
 
 export interface Category {
-    id: string
-    name: string
-    description?: string
-    parentId?: string | null
+  id: string
+  name: string
+  parentId?: string | null
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
 }
 
-
 export const categoryApi = {
-    getAll: () => apiClient.get<Category[]>('/categories'),
-    create: (data: Partial<Category>) => apiClient.post<Category>('/categories', data),
-    update: (id:string, data: Partial<Category>) => apiClient.patch<Category>(`/categories/${id}`,data),
-    remove: (id: string) => apiClient.delete(`/categories/${id}`)
+  getAll: () => apiClient.get<Category[]>('/categories'),
+  getOne: (id: string) => apiClient.get<Category>(`/categories/${id}`),
+  create: (data: { name: string; parentId?: string; isActive?: boolean }) =>
+    apiClient.post<Category>('/categories', data),
+  update: (
+    id: string,
+    data: { name?: string; parentId?: string | null; isActive?: boolean },
+  ) => apiClient.patch<Category>(`/categories/${id}`, data),
+  remove: (id: string) => apiClient.delete(`/categories/${id}`),
 }

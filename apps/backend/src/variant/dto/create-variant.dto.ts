@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsNumber, IsOptional, IsString, IsUrl, IsUUID, MaxLength, Min, MinLength } from "class-validator";
 
 
 export class CreateVariantDto {
@@ -34,6 +34,13 @@ export class CreateVariantDto {
     @IsNumber()
     costPrice!: number;
     
+    @IsOptional()
+    @IsArray()
+    @ArrayMaxSize(20)
+    @IsUrl({ protocols: ['http', 'https'], require_protocol: true }, { each: true })
+    @MaxLength(2048, { each: true })
+    imageUrls?: string[];
+
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
