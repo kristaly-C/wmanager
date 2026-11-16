@@ -4,7 +4,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { AuthUser, CurrentUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
-import { Role } from "../generated/prisma/enums";
+import { Role, MovementType } from "../generated/prisma/enums";
 import { AdjustStockDto } from "./dto/adjust-stock.dto";
 
 
@@ -19,16 +19,19 @@ export class StockController{
         @CurrentUser() user: AuthUser,
         @Query('locationId') locationId?: string,
         @Query('variantId') variantId?: string,
+        @Query('productId') productId?: string,
+        @Query('search') search?: string,
         @Query('skip') skip?: string,
         @Query('take') take?: string,
-    ){
-        return this.stockService.findAll(
-            user,
+    ) {
+        return this.stockService.findAll(user, {
             locationId,
             variantId,
-            skip !== undefined ? Number(skip) : undefined,
-            take !== undefined ? Number(take) : undefined,
-        );
+            productId,
+            search,
+            skip: skip !== undefined ? Number(skip) : undefined,
+            take: take !== undefined ? Number(take) : undefined,
+        });
     }
 
     @Get('movements')
@@ -36,16 +39,21 @@ export class StockController{
         @CurrentUser() user: AuthUser,
         @Query('locationId') locationId?: string,
         @Query('variantId') variantId?: string,
+        @Query('productId') productId?: string,
+        @Query('type') type?: MovementType,
+        @Query('search') search?: string,
         @Query('skip') skip?: string,
         @Query('take') take?: string,
-    ){
-        return this.stockService.findMovements(
-            user,
+    ) {
+        return this.stockService.findMovements(user, {
             locationId,
             variantId,
-            skip !== undefined ? Number(skip) : undefined,
-            take !== undefined ? Number(take) : undefined,
-        );
+            productId,
+            type,
+            search,
+            skip: skip !== undefined ? Number(skip) : undefined,
+            take: take !== undefined ? Number(take) : undefined,
+        });
     }
 
     @Roles(Role.ADMIN,

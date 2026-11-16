@@ -2,6 +2,14 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 
 
+export interface QuickStockBreakdown {
+    locationId: string
+    locationName: string
+    totalQty: number
+    reservedQty: number
+    freeQty: number
+}
+
 export interface QuickProductInfo {
     id: string
     productId: string
@@ -11,7 +19,15 @@ export interface QuickProductInfo {
     barcode: string
     price: number
     freeStock: number
-    shelf: string   
+    shelf: string
+    imageUrl?: string | null
+    brandName?: string
+    categoryName?: string
+    supplierName?: string
+    manufacturerCode?: string
+    model?: string
+    material?: string | null
+    stockBreakdown?: QuickStockBreakdown[]
 }
 
 

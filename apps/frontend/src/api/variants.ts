@@ -1,4 +1,6 @@
+import type { LocationType } from '@wmanager/shared-types'
 import apiClient from './axios'
+import type { ProductListItem } from './products'
 
 export interface VariantBarcodeItem {
   id: string
@@ -10,6 +12,20 @@ export interface VariantBarcodeItem {
   updatedAt: string
 }
 
+export interface VariantStockItem {
+  id: string
+  locationId: string
+  quantity: number
+  reservedQuantity: number
+  isExternalLocation?: boolean
+  location?: {
+    id: string
+    name: string
+    type: LocationType
+    parentId: string | null
+  }
+}
+
 export interface VariantItem {
   id: string
   productId: string
@@ -19,10 +35,13 @@ export interface VariantItem {
   weight: number | string
   price: number | string
   costPrice?: number | string
+  imageUrls?: string[]
   isActive: boolean
   createdAt: string
   updatedAt: string
   variantBarcodes?: VariantBarcodeItem[]
+  product?: ProductListItem
+  stockItems?: VariantStockItem[]
 }
 
 export interface CreateVariantPayload {
@@ -33,6 +52,7 @@ export interface CreateVariantPayload {
   weight: number
   price: number
   costPrice: number
+  imageUrls?: string[]
   isActive?: boolean
 }
 
@@ -45,6 +65,7 @@ export interface BulkVariantItemPayload {
   weight: number
   price: number
   costPrice: number
+  imageUrls?: string[]
   isActive?: boolean
   primaryBarcode?: string
 }

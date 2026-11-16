@@ -12,8 +12,13 @@ import {
 } from '@/utils/locationMeta'
 import LocationFormModal from '@/components/inventory/LocationFormModal.vue'
 import LocationBulkModal from '@/components/inventory/LocationBulkModal.vue'
+import StockItemsTab from '@/components/inventory/StockItemsTab.vue'
+import StockMovementsTab from '@/components/inventory/StockMovementsTab.vue'
+import StockAdjustModal from '@/components/inventory/StockAdjustModal.vue'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
+
+type InventoryTab = 'locations' | 'stock' | 'movements'
 
 interface FlatTreeRow {
   location: LocationItem
@@ -26,6 +31,13 @@ interface FlatTreeRow {
 
 const authStore = useAuthStore()
 const toast = useToast()
+
+const activeTab = ref<InventoryTab>('locations')
+const tabs: { id: InventoryTab; label: string; icon: string }[] = [
+  { id: 'locations', label: 'Pozíciók & Térkép', icon: 'pi pi-sitemap' },
+  { id: 'stock', label: 'Készlet áttekintés', icon: 'pi pi-box' },
+  { id: 'movements', label: 'Mozgási napló', icon: 'pi pi-history' },
+]
 
 const locations = ref<LocationItem[]>([])
 const loading = ref(false)
@@ -53,6 +65,9 @@ const bulkInitialParentId = ref<string | null>(null)
 
 const isDeleteConfirmOpen = ref(false)
 
+const isStockAdjustModalOpen = ref(false)
+const stockAdjustInitialLocationId = ref<string | null>(null)
+
 // Jogosultságok (backend LocationController + LOCATION_UNBOUND_ROLES szerint)
 const canCreateRoot = computed(() => {
   const role = authStore.user?.role
@@ -66,6 +81,18 @@ const canManageLocations = computed(() => {
     role === Role.BOSS ||
     role === Role.WAREHOUSE_MANAGER ||
     role === Role.STORE_MANAGER
+  )
+})
+
+const canAdjustStock = computed(() => {
+  const role = authStore.user?.role
+  return (
+    role === Role.ADMIN ||
+    role === Role.BOSS ||
+    role === Role.WAREHOUSE_MANAGER ||
+    role === Role.STORE_MANAGER ||
+    role === Role.WAREHOUSE_STAFF ||
+    role === Role.STORE_STAFF
   )
 })
 
@@ -218,7 +245,9 @@ const activePercentage = computed(() => {
 })
 
 const anyBranchParentsExist = computed(() =>
-  locations.value.some((l) => LOCATION_TYPE_META[l.type].childType !== null),
+  locations.value.some(
+    (l) => l.isAssigned !== false && LOCATION_TYPE_META[l.type].childType !== null,
+  ),
 )
 
 const allExpandableExpanded = computed(() => {
@@ -277,7 +306,10 @@ async function loadLocations() {
     }
 
     if (!selectedLocationId.value && res.data.length > 0) {
-      const firstRoot = res.data.find((l) => l.parentId === null) ?? res.data[0]
+      const firstRoot =
+        res.data.find((l) => l.parentId === null && l.isAssigned !== false) ??
+        res.data.find((l) => l.parentId === null) ??
+        res.data[0]
       if (firstRoot) selectedLocationId.value = firstRoot.id
     }
   } catch (err) {
@@ -319,10 +351,15 @@ function openEditModal(location: LocationItem) {
 }
 
 function openBulkModal(parent?: LocationItem | null) {
-  if (parent && LOCATION_TYPE_META[parent.type].childType !== null) {
+  if (
+    parent &&
+    parent.isAssigned !== false &&
+    LOCATION_TYPE_META[parent.type].childType !== null
+  ) {
     bulkInitialParentId.value = parent.id
   } else if (
     selectedLocation.value &&
+    selectedLocation.value.isAssigned !== false &&
     LOCATION_TYPE_META[selectedLocation.value.type].childType !== null
   ) {
     bulkInitialParentId.value = selectedLocation.value.id
@@ -330,6 +367,11 @@ function openBulkModal(parent?: LocationItem | null) {
     bulkInitialParentId.value = null
   }
   isBulkModalOpen.value = true
+}
+
+function openStockAdjustForLocation(location: LocationItem) {
+  stockAdjustInitialLocationId.value = location.id
+  isStockAdjustModalOpen.value = true
 }
 
 async function onFormSaved(saved: LocationItem) {
@@ -428,8 +470,30 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6 text-[#171918]">
-    <!-- 1. OLDALFEJLÉC -->
+  <div class="space-y-5">
+    <!-- FELSŐ AL-NAVIGÁCIÓ (Kapszula váltó) -->
+    <div class="flex items-center justify-between">
+      <div class="inline-flex items-center bg-white border border-white rounded-2xl p-1 shadow-sm gap-1">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          type="button"
+          @click="activeTab = tab.id"
+          class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer"
+          :class="
+            activeTab === tab.id
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+          "
+        >
+          <i :class="[tab.icon, 'text-xs']"></i>
+          <span>{{ tab.label }}</span>
+        </button>
+      </div>
+    </div>
+
+    <div v-if="activeTab === 'locations'" class="space-y-6 text-[#171918]">
+      <!-- 1. OLDALFEJLÉC -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-[30px] font-semibold tracking-[-0.42px] text-[#171918] leading-tight">
@@ -719,6 +783,13 @@ onMounted(() => {
                   >
                     Inaktív
                   </span>
+
+                  <span
+                    v-if="row.location.isAssigned === false"
+                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 shrink-0"
+                  >
+                    Másik telephely (csak betekintés)
+                  </span>
                 </div>
 
                 <p v-if="row.location.description" class="text-[11px] text-[#686f6a] truncate">
@@ -736,7 +807,13 @@ onMounted(() => {
                 {{ row.directChildCount }}
               </span>
 
-              <template v-if="canManageLocations && LOCATION_TYPE_META[row.location.type].childButtonLabel">
+              <template
+                v-if="
+                  canManageLocations &&
+                  row.location.isAssigned !== false &&
+                  LOCATION_TYPE_META[row.location.type].childButtonLabel
+                "
+              >
                 <button
                   type="button"
                   @click.stop="openQuickCreateChildModal(row.location)"
@@ -821,6 +898,13 @@ onMounted(() => {
                 >
                   {{ SLOT_MODE_META[selectedLocation.slotMode].label }}
                 </span>
+
+                <span
+                  v-if="selectedLocation.isAssigned === false"
+                  class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200"
+                >
+                  Másik telephely (csak betekintés)
+                </span>
               </div>
             </div>
           </div>
@@ -853,8 +937,20 @@ onMounted(() => {
             </div>
           </div>
 
+          <!-- Készletművelet az adott pozícióra -->
+          <div v-if="canAdjustStock && selectedLocation.isActive && selectedLocation.isAssigned !== false">
+            <button
+              type="button"
+              @click="openStockAdjustForLocation(selectedLocation)"
+              class="w-full h-[38px] rounded-[10px] bg-[#f46714] hover:bg-[#dc590d] text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition shadow-2xs"
+            >
+              <i class="pi pi-plus-circle text-xs"></i>
+              <span>+ Készlet felvitele erre a pozícióra</span>
+            </button>
+          </div>
+
           <!-- Gyors műveletek -->
-          <div v-if="canManageLocations" class="space-y-2">
+          <div v-if="canManageLocations && selectedLocation.isAssigned !== false" class="space-y-2">
             <div
               v-if="LOCATION_TYPE_META[selectedLocation.type].childButtonLabel"
               class="grid grid-cols-2 gap-2"
@@ -1017,5 +1113,23 @@ onMounted(() => {
         </div>
       </div>
     </Dialog>
+    </div>
+
+    <StockItemsTab
+      v-else-if="activeTab === 'stock'"
+      :allLocations="locations"
+      :canAdjustStock="canAdjustStock"
+    />
+
+    <StockMovementsTab
+      v-else-if="activeTab === 'movements'"
+      :allLocations="locations"
+    />
+
+    <StockAdjustModal
+      v-model:visible="isStockAdjustModalOpen"
+      :initialLocationId="stockAdjustInitialLocationId"
+      :allLocations="locations"
+    />
   </div>
 </template>

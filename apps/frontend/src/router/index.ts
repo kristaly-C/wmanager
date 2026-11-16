@@ -7,6 +7,7 @@ import DashboardView from '@/views/DashboardView.vue'
 import InventoryView from '@/views/InventoryView.vue'
 import LoginView from '@/views/LoginView.vue'
 import PdaHomeView from '@/views/PdaHomeView.vue'
+import StockMovementsView from '@/views/StockMovementsView.vue'
 import UsersView from '@/views/UsersView.vue'
 import { Role } from '@wmanager/shared-types'
 import { createRouter, createWebHistory } from 'vue-router'
@@ -80,6 +81,23 @@ const router = createRouter({
               Role.STORE_MANAGER,
             ],
           },
+        },
+        {
+          path: 'movements',
+          name: 'movements',
+          component: StockMovementsView,
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+            ],
+          },
+        },
+        {
+          path: 'stock-lookup',
+          redirect: '/inventory',
         },
       ],
     },

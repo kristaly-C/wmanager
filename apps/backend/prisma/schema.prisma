@@ -167,10 +167,11 @@ model Variant {
   productId String
   product   Product  @relation(fields: [productId], references: [id])
 
-  sku    String @unique
-  colors String[]
-  size   String
-  weight Decimal @db.Decimal(10, 3)
+  sku       String   @unique
+  colors    String[]
+  size      String
+  weight    Decimal  @db.Decimal(10, 3)
+  imageUrls String[] @default([])
   
   stocktakeItems StocktakeItem[]
   stockItems  StockItem[]

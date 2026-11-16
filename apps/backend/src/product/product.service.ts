@@ -16,10 +16,49 @@ export class ProductService extends BaseService<PrismaService['product']> {
         super(prisma.product);
     }
 
+    private async getCategorySubtreeIds(rootCategoryId: string): Promise<string[]> {
+        const allCategories = await this.prisma.category.findMany({
+            select: { id: true, parentId: true },
+        });
+        const childrenByParent = new Map<string, string[]>();
+        for (const cat of allCategories) {
+            if (!cat.parentId) continue;
+            const list = childrenByParent.get(cat.parentId);
+            if (list) {
+                list.push(cat.id);
+            } else {
+                childrenByParent.set(cat.parentId, [cat.id]);
+            }
+        }
+
+        const result: string[] = [];
+        const queue: string[] = [rootCategoryId];
+        const visited = new Set<string>();
+
+        while (queue.length > 0) {
+            const currentId = queue.shift()!;
+            if (visited.has(currentId)) continue;
+            visited.add(currentId);
+            result.push(currentId);
+            const children = childrenByParent.get(currentId) ?? [];
+            for (const childId of children) {
+                if (!visited.has(childId)) {
+                    queue.push(childId);
+                }
+            }
+        }
+
+        return result;
+    }
+
     async findAllFiltered(options?: FindProductsOptions) {
         const q = options?.search?.trim();
+        const categoryIds = options?.categoryId
+            ? await this.getCategorySubtreeIds(options.categoryId)
+            : undefined;
+
         const where = {
-            ...(options?.categoryId ? { categoryId: options.categoryId } : {}),
+            ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
             ...(options?.brandId ? { brandId: options.brandId } : {}),
             ...(q
                 ? {
@@ -28,6 +67,7 @@ export class ProductService extends BaseService<PrismaService['product']> {
                           { manufacturerCode: { contains: q, mode: 'insensitive' as const } },
                           { model: { contains: q, mode: 'insensitive' as const } },
                           { brand: { name: { contains: q, mode: 'insensitive' as const } } },
+                          { category: { name: { contains: q, mode: 'insensitive' as const } } },
                           {
                               variants: {
                                   some: {

@@ -9,6 +9,9 @@ import { extractApiError } from '@/utils/locationMeta'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
 
+type WizardStep = 1 | 2 | 3
+type SkuFormat = 'padded3' | 'hyphen' | 'plain'
+
 interface PreviewRow {
   size: string
   sku: string
@@ -25,19 +28,41 @@ const QUICK_COLORS = [
   'Neonsárga',
   'Narancs',
   'Zöld',
-  'Ezüst',
-  'Arany',
 ]
 
 const APPAREL_SIZES = ['XXS', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', 'UNI']
 const NUMERIC_SIZES = ['36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48']
 
 const SIZE_PRESETS: { label: string; sizes: string[] }[] = [
-  { label: 'Ruházat (XS–3XL)', sizes: ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'] },
-  { label: 'Alap (S–2XL)', sizes: ['S', 'M', 'L', 'XL', '2XL'] },
-  { label: 'Csizma / Cipő (39–46)', sizes: ['39', '40', '41', '42', '43', '44', '45', '46'] },
-  { label: 'Bukósisak (XS–2XL)', sizes: ['XS', 'S', 'M', 'L', 'XL', '2XL'] },
-  { label: 'Egy-méret (UNI)', sizes: ['UNI'] },
+  { label: 'Ruházat XS–3XL', sizes: ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'] },
+  { label: 'Alap S–2XL', sizes: ['S', 'M', 'L', 'XL', '2XL'] },
+  { label: 'Csizma 39–46', sizes: ['39', '40', '41', '42', '43', '44', '45', '46'] },
+  { label: 'Bukósisak XS–2XL', sizes: ['XS', 'S', 'M', 'L', 'XL', '2XL'] },
+  { label: 'Egy-méret UNI', sizes: ['UNI'] },
+]
+
+const WIZARD_STEPS: { step: WizardStep; shortTitle: string; title: string }[] = [
+  { step: 1, shortTitle: 'Szín, súly és árak', title: '1. lépés – Szín, súly és árak' },
+  { step: 2, shortTitle: 'Méretek kiválasztása', title: '2. lépés – Méretek kiválasztása' },
+  { step: 3, shortTitle: 'SKU és Vonalkódok', title: '3. lépés – Cikkszámok (SKU) és Vonalkódok' },
+]
+
+const SKU_FORMAT_OPTIONS: { value: SkuFormat; codeLabel: string; description: string }[] = [
+  {
+    value: 'padded3',
+    codeLabel: '00L',
+    description: '3 kar. nullázott – pl. Difi',
+  },
+  {
+    value: 'hyphen',
+    codeLabel: '-L',
+    description: 'Kötőjeles',
+  },
+  {
+    value: 'plain',
+    codeLabel: 'L',
+    description: 'Közvetlenül egybeírva',
+  },
 ]
 
 const props = defineProps<{
@@ -58,11 +83,13 @@ const emit = defineEmits<{
 
 const toast = useToast()
 const saving = ref(false)
+const step = ref<WizardStep>(1)
 
 const form = ref({
   sku: '',
   size: '',
   colors: [] as string[],
+  imageUrls: [] as string[],
   weight: 0.5,
   costPrice: 0,
   price: 0,
@@ -70,15 +97,16 @@ const form = ref({
 })
 
 const colorInput = ref('')
+const newImageUrl = ref('')
 const customSizeInput = ref('')
-const skuPrefix = ref('')
-const skuPrefixManuallyEdited = ref(false)
+const baseSku = ref('')
+const skuFormat = ref<SkuFormat>('padded3')
 const previewRows = ref<PreviewRow[]>([])
 
 const dialogTitle = computed(() => {
   if (props.mode === 'edit') return 'Variáns szerkesztése'
   if (props.templateVariant) return 'Új méretsor klónozása meglévő variánsból'
-  return 'Új variánsok létrehozása (méretsor)'
+  return 'Új variánsok létrehozása'
 })
 
 const existingSkuSet = computed(() => {
@@ -86,71 +114,59 @@ const existingSkuSet = computed(() => {
   return new Set(list.map((s) => s.trim().toUpperCase()))
 })
 
-function stripAccents(str: string): string {
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-}
+const sampleSize = computed(() => previewRows.value[0]?.size || 'L')
+const sampleBaseSku = computed(() => baseSku.value.trim() || '13102117421')
 
-function abbreviateColor(color: string): string {
-  return stripAccents(color)
-    .replace(/[^a-zA-Z0-9]/g, '')
-    .slice(0, 3)
-    .toUpperCase()
-}
+function buildRowSku(base: string, format: SkuFormat, size: string): string {
+  const cleanBase = base.trim()
+  const cleanSize = size.trim()
+  if (!cleanSize) return cleanBase
 
-function computeDefaultSkuPrefix(): string {
-  const base = (props.manufacturerCode || 'TERM').trim().toUpperCase()
-  const colorParts = form.value.colors
-    .map((c) => abbreviateColor(c))
-    .filter((abbr) => abbr.length > 0)
-  return [base, ...colorParts].filter(Boolean).join('-')
-}
-
-function buildRowSku(prefix: string, size: string): string {
-  const cleanPrefix = prefix.trim().replace(/-+$/, '')
-  return cleanPrefix ? `${cleanPrefix}-${size}` : size
+  if (format === 'padded3') {
+    return `${cleanBase}${cleanSize.toUpperCase().padStart(3, '0')}`
+  }
+  if (format === 'hyphen') {
+    const trimmedBase = cleanBase.replace(/-+$/, '')
+    return trimmedBase ? `${trimmedBase}-${cleanSize}` : cleanSize
+  }
+  return `${cleanBase}${cleanSize}`
 }
 
 function syncAutoRowSkus() {
   for (const row of previewRows.value) {
     if (!row.skuManuallyEdited) {
-      row.sku = buildRowSku(skuPrefix.value, row.size)
+      row.sku = buildRowSku(baseSku.value, skuFormat.value, row.size)
     }
   }
 }
 
-watch(
-  () => form.value.colors,
-  () => {
-    if (props.mode !== 'create') return
-    if (!skuPrefixManuallyEdited.value) {
-      skuPrefix.value = computeDefaultSkuPrefix()
-      syncAutoRowSkus()
-    }
-  },
-  { deep: true },
-)
-
-function onSkuPrefixInput() {
-  skuPrefixManuallyEdited.value = true
+watch([baseSku, skuFormat], () => {
+  if (props.mode !== 'create') return
   syncAutoRowSkus()
+})
+
+function selectSkuFormat(format: SkuFormat) {
+  skuFormat.value = format
 }
 
-function regenerateAllSkus() {
-  skuPrefixManuallyEdited.value = false
-  skuPrefix.value = computeDefaultSkuPrefix()
+function resetAllRowSkusToAuto() {
   for (const row of previewRows.value) {
     row.skuManuallyEdited = false
-    row.sku = buildRowSku(skuPrefix.value, row.size)
+    row.sku = buildRowSku(baseSku.value, skuFormat.value, row.size)
   }
 }
+
+const hasManualRowEdits = computed(() => previewRows.value.some((r) => r.skuManuallyEdited))
 
 watch(
   () => props.visible,
   (isOpen) => {
     if (!isOpen) return
+    step.value = 1
     colorInput.value = ''
+    newImageUrl.value = ''
     customSizeInput.value = ''
-    skuPrefixManuallyEdited.value = false
+    skuFormat.value = 'padded3'
     previewRows.value = []
 
     if (props.mode === 'edit' && props.editingVariant) {
@@ -159,23 +175,26 @@ watch(
         sku: v.sku,
         size: v.size,
         colors: Array.isArray(v.colors) ? [...v.colors] : [],
+        imageUrls: Array.isArray(v.imageUrls) ? [...v.imageUrls] : [],
         weight: Number(v.weight ?? 0),
         costPrice: Number(v.costPrice ?? 0),
         price: Number(v.price ?? 0),
         isActive: v.isActive,
       }
+      baseSku.value = ''
     } else {
       const tpl = props.templateVariant
       form.value = {
         sku: '',
         size: '',
         colors: tpl && Array.isArray(tpl.colors) ? [...tpl.colors] : [],
+        imageUrls: tpl && Array.isArray(tpl.imageUrls) ? [...tpl.imageUrls] : [],
         weight: tpl ? Number(tpl.weight ?? 0.5) : 0.5,
         costPrice: tpl ? Number(tpl.costPrice ?? 0) : 0,
         price: tpl ? Number(tpl.price ?? 0) : 0,
         isActive: tpl ? tpl.isActive : true,
       }
-      skuPrefix.value = computeDefaultSkuPrefix()
+      baseSku.value = (props.manufacturerCode || '').trim()
     }
   },
 )
@@ -210,6 +229,47 @@ function removeColor(index: number) {
   form.value.colors.splice(index, 1)
 }
 
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function addImageUrl(): boolean {
+  const url = newImageUrl.value.trim()
+  if (!url) return true
+  if (!isValidHttpUrl(url)) {
+    toast.add({
+      severity: 'error',
+      summary: 'Érvénytelen URL',
+      detail: 'A kép URL-nek http:// vagy https:// előtaggal kell kezdődnie.',
+      life: 4000,
+    })
+    return false
+  }
+  if (form.value.imageUrls.length >= 20) {
+    toast.add({
+      severity: 'error',
+      summary: 'Maximum elérve',
+      detail: 'Legfeljebb 20 kép URL adható meg egy variánshoz.',
+      life: 4000,
+    })
+    return false
+  }
+  if (!form.value.imageUrls.includes(url)) {
+    form.value.imageUrls.push(url)
+  }
+  newImageUrl.value = ''
+  return true
+}
+
+function removeImageUrl(index: number) {
+  form.value.imageUrls.splice(index, 1)
+}
+
 function isSizeSelected(size: string): boolean {
   return previewRows.value.some((r) => r.size === size)
 }
@@ -219,7 +279,7 @@ function addSizeRow(size: string) {
   if (!normalized || isSizeSelected(normalized)) return
   previewRows.value.push({
     size: normalized,
-    sku: buildRowSku(skuPrefix.value, normalized),
+    sku: buildRowSku(baseSku.value, skuFormat.value, normalized),
     primaryBarcode: '',
     skuManuallyEdited: false,
   })
@@ -279,32 +339,28 @@ function isSkuDuplicateInBatch(sku: string, rowIndex: number): boolean {
   )
 }
 
-const conflictingRowCount = computed(
-  () =>
-    previewRows.value.filter(
-      (r, idx) => isSkuInExisting(r.sku) || isSkuDuplicateInBatch(r.sku, idx),
-    ).length,
+const existingConflictCount = computed(
+  () => previewRows.value.filter((r) => isSkuInExisting(r.sku)).length,
 )
 
 function removeExistingSkuRows() {
   previewRows.value = previewRows.value.filter((r) => !isSkuInExisting(r.sku))
 }
 
-function closeModal() {
-  emit('update:visible', false)
+function isValidNonNegativeNumber(val: unknown): boolean {
+  if (val === '' || val === null || val === undefined) return false
+  const num = Number(val)
+  return Number.isFinite(num) && num >= 0
 }
 
-async function handleSubmit() {
+function validateStep1(): boolean {
   if (colorInput.value.trim()) {
     addColorsFromInput()
   }
-  if (customSizeInput.value.trim()) {
-    addCustomSize()
-  }
 
-  const weight = Number(form.value.weight)
-  const costPrice = Number(form.value.costPrice)
-  const price = Number(form.value.price)
+  if (newImageUrl.value.trim() && !addImageUrl()) {
+    return false
+  }
 
   if (form.value.colors.length === 0) {
     toast.add({
@@ -313,36 +369,92 @@ async function handleSubmit() {
       detail: 'Legalább egy színt adj meg a variánshoz.',
       life: 4000,
     })
-    return
+    return false
   }
 
   if (
-    Number.isNaN(weight) ||
-    weight < 0 ||
-    Number.isNaN(costPrice) ||
-    costPrice < 0 ||
-    Number.isNaN(price) ||
-    price < 0
+    !isValidNonNegativeNumber(form.value.weight) ||
+    !isValidNonNegativeNumber(form.value.costPrice) ||
+    !isValidNonNegativeNumber(form.value.price)
   ) {
     toast.add({
       severity: 'error',
       summary: 'Érvénytelen számérték',
-      detail: 'A súly, beszerzési ár és eladási ár nem lehet negatív.',
+      detail: 'A súly, beszerzési ár és eladási ár nem lehet üres vagy negatív.',
       life: 4000,
     })
-    return
+    return false
   }
 
-  if (props.mode === 'create') {
-    if (previewRows.value.length === 0) {
-      toast.add({
-        severity: 'error',
-        summary: 'Nincs kijelölt méret',
-        detail: 'Jelölj ki legalább egy méretet a létrehozáshoz.',
-        life: 4000,
-      })
+  return true
+}
+
+function validateStep2(): boolean {
+  if (customSizeInput.value.trim()) {
+    addCustomSize()
+  }
+
+  if (previewRows.value.length === 0) {
+    toast.add({
+      severity: 'error',
+      summary: 'Nincs kijelölt méret',
+      detail: 'Jelölj ki legalább egy méretet a továbblépéshez.',
+      life: 4000,
+    })
+    return false
+  }
+
+  return true
+}
+
+function goToStep(target: WizardStep) {
+  if (target === step.value) return
+  if (target < step.value) {
+    step.value = target
+    return
+  }
+  if (step.value === 1) {
+    if (!validateStep1()) return
+    if (target === 2) {
+      step.value = 2
       return
     }
+    if (target === 3) {
+      if (!validateStep2()) return
+      step.value = 3
+    }
+    return
+  }
+  if (step.value === 2 && target === 3) {
+    if (!validateStep2()) return
+    step.value = 3
+  }
+}
+
+function closeModal() {
+  emit('update:visible', false)
+}
+
+async function handleSubmit() {
+  if (props.mode === 'create') {
+    if (step.value === 1) {
+      goToStep(2)
+      return
+    }
+    if (step.value === 2) {
+      goToStep(3)
+      return
+    }
+  }
+
+  if (!validateStep1()) return
+
+  const weight = Number(form.value.weight)
+  const costPrice = Number(form.value.costPrice)
+  const price = Number(form.value.price)
+
+  if (props.mode === 'create') {
+    if (!validateStep2()) return
 
     for (let i = 0; i < previewRows.value.length; i++) {
       const row = previewRows.value[i]!
@@ -384,6 +496,7 @@ async function handleSubmit() {
         weight,
         costPrice,
         price,
+        imageUrls: form.value.imageUrls.length > 0 ? [...form.value.imageUrls] : undefined,
         isActive: form.value.isActive,
         ...(row.primaryBarcode.trim()
           ? { primaryBarcode: row.primaryBarcode.trim() }
@@ -437,6 +550,7 @@ async function handleSubmit() {
       sku,
       size,
       colors: form.value.colors,
+      imageUrls: form.value.imageUrls,
       weight,
       costPrice,
       price,
@@ -470,9 +584,9 @@ async function handleSubmit() {
     @update:visible="(val) => emit('update:visible', val)"
     modal
     :header="dialogTitle"
-    :style="{ width: mode === 'create' ? '44rem' : '34rem', maxWidth: '95vw' }"
+    :style="{ width: mode === 'create' ? '48rem' : '34rem', maxWidth: '95vw' }"
   >
-    <form @submit.prevent="handleSubmit" class="space-y-4 pt-1">
+    <form @submit.prevent="handleSubmit" class="space-y-5 pt-1">
       <!-- Termék fejléc info -->
       <div
         v-if="productName"
@@ -487,176 +601,511 @@ async function handleSubmit() {
         </div>
         <span
           v-if="manufacturerCode"
-          class="font-mono text-[11px] font-semibold bg-white border border-slate-200 text-slate-600 px-2 py-0.5 rounded-lg shrink-0"
+          class="font-mono text-[11px] font-semibold bg-white border border-slate-200 text-slate-600 px-2.5 py-1 rounded-lg shrink-0"
         >
           {{ manufacturerCode }}
         </span>
       </div>
 
+      <!-- CREATE MODE: 3-lépéses vizuális folyamatjelző -->
+      <div
+        v-if="mode === 'create'"
+        class="grid grid-cols-3 gap-2 bg-slate-50/90 border border-slate-200/80 rounded-2xl p-2"
+      >
+        <button
+          v-for="item in WIZARD_STEPS"
+          :key="item.step"
+          type="button"
+          @click="goToStep(item.step)"
+          class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition cursor-pointer"
+          :class="
+            step === item.step
+              ? 'bg-white shadow-xs border border-orange-200 text-slate-900'
+              : step > item.step
+                ? 'bg-emerald-50/60 hover:bg-emerald-50 border border-transparent text-emerald-800'
+                : 'hover:bg-white/60 border border-transparent text-slate-400'
+          "
+        >
+          <span
+            class="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0 transition"
+            :class="
+              step === item.step
+                ? 'bg-orange-600 text-white'
+                : step > item.step
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-200 text-slate-600'
+            "
+          >
+            <i v-if="step > item.step" class="pi pi-check text-[10px]"></i>
+            <span v-else>{{ item.step }}</span>
+          </span>
+          <div class="min-w-0">
+            <span class="block text-[10px] font-bold uppercase tracking-wider opacity-70">
+              {{ item.step }}. lépés
+            </span>
+            <span class="block text-xs font-bold truncate">
+              {{ item.shortTitle }}
+            </span>
+          </div>
+        </button>
+      </div>
+
       <!-- Klónozás visszajelző sáv -->
       <div
-        v-if="mode === 'create' && templateVariant"
-        class="bg-orange-50/70 border border-orange-200 rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs text-orange-800"
+        v-if="mode === 'create' && templateVariant && step === 1"
+        class="bg-orange-50/70 border border-orange-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2 text-xs text-orange-800"
       >
         <i class="pi pi-copy text-orange-600 text-xs"></i>
         <span>
           Színek, súly és árak átvéve a(z)
-          <strong class="font-mono">{{ templateVariant.sku }}</strong> variánsból. Válaszd ki az új
-          méreteket!
+          <strong class="font-mono">{{ templateVariant.sku }}</strong> variánsból.
         </span>
       </div>
 
-      <!-- EDIT MODE: Cikkszám (SKU) + Méret -->
-      <div v-if="mode === 'edit'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div class="space-y-1.5">
-          <label class="block text-xs font-medium text-slate-600">Cikkszám (SKU) *</label>
-          <input
-            v-model="form.sku"
-            type="text"
-            required
-            maxlength="100"
-            placeholder="pl. ALP-TGP-BK-L"
-            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm text-slate-900 outline-none focus:border-orange-500"
-          />
+      <!-- ========================================================= -->
+      <!-- EDIT MODE (egyetlen nézet)                                 -->
+      <!-- ========================================================= -->
+      <template v-if="mode === 'edit'">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-slate-600">Cikkszám (SKU) *</label>
+            <input
+              v-model="form.sku"
+              type="text"
+              required
+              maxlength="100"
+              placeholder="pl. 1310211742100L"
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-slate-600">Méret *</label>
+            <input
+              v-model="form.size"
+              type="text"
+              required
+              maxlength="50"
+              placeholder="pl. M, L, XL, 42, 54"
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+          </div>
         </div>
 
-        <div class="space-y-1.5">
-          <label class="block text-xs font-medium text-slate-600">Méret *</label>
-          <input
-            v-model="form.size"
-            type="text"
-            required
-            maxlength="50"
-            placeholder="pl. M, L, XL, 42, 54"
-            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
-          />
-        </div>
-      </div>
-
-      <!-- Színek (string[]) + Gyors színválasztó chipek -->
-      <div class="space-y-2">
-        <label class="block text-xs font-medium text-slate-600">
-          Színek * (kattints a gyakori színekre vagy adj meg egyénit)
-        </label>
-
-        <!-- Gyors szín chipek -->
-        <div class="flex flex-wrap gap-1.5">
-          <button
-            v-for="quickColor in QUICK_COLORS"
-            :key="quickColor"
-            type="button"
-            @click="toggleQuickColor(quickColor)"
-            class="px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1"
-            :class="
-              form.colors.includes(quickColor)
-                ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-            "
-          >
-            <i
+        <!-- Színek -->
+        <div class="space-y-2">
+          <label class="block text-xs font-medium text-slate-600">
+            Színek * (kattints a gyakori színekre vagy adj meg egyénit)
+          </label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="quickColor in QUICK_COLORS"
+              :key="quickColor"
+              type="button"
+              @click="toggleQuickColor(quickColor)"
+              class="px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer flex items-center gap-1"
               :class="
                 form.colors.includes(quickColor)
-                  ? 'pi pi-check text-[10px]'
-                  : 'pi pi-plus text-[10px] text-slate-400'
+                  ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
               "
-            ></i>
-            <span>{{ quickColor }}</span>
-          </button>
-        </div>
-
-        <!-- Egyéni szín megadása -->
-        <div class="flex gap-2">
-          <input
-            v-model="colorInput"
-            type="text"
-            maxlength="100"
-            placeholder="Egyéni szín (pl. Matt fekete, Terepmintás)..."
-            @keydown.enter.prevent="addColorsFromInput"
-            class="flex-1 h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-orange-500"
-          />
-          <button
-            type="button"
-            @click="addColorsFromInput"
-            class="h-9 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer transition"
-          >
-            + Hozzáadás
-          </button>
-        </div>
-
-        <!-- Kiválasztott színek listája -->
-        <div v-if="form.colors.length > 0" class="flex flex-wrap items-center gap-1.5 pt-0.5">
-          <span class="text-[11px] font-semibold text-slate-400 mr-1">Kiválasztva:</span>
-          <span
-            v-for="(color, idx) in form.colors"
-            :key="color"
-            class="inline-flex items-center gap-1.5 bg-orange-50 text-orange-800 border border-orange-200 text-xs font-semibold px-2.5 py-0.5 rounded-lg"
-          >
-            <span>{{ color }}</span>
+            >
+              <i
+                :class="
+                  form.colors.includes(quickColor)
+                    ? 'pi pi-check text-[10px]'
+                    : 'pi pi-plus text-[10px] text-slate-400'
+                "
+              ></i>
+              <span>{{ quickColor }}</span>
+            </button>
+          </div>
+          <div class="flex gap-2">
+            <input
+              v-model="colorInput"
+              type="text"
+              maxlength="100"
+              placeholder="Egyéni szín (pl. Matt fekete, Terepmintás)..."
+              @keydown.enter.prevent="addColorsFromInput"
+              class="flex-1 h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-orange-500"
+            />
             <button
               type="button"
-              @click="removeColor(idx)"
-              class="text-orange-400 hover:text-rose-600 cursor-pointer"
-              title="Szín eltávolítása"
+              @click="addColorsFromInput"
+              class="h-9 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer transition"
             >
-              <i class="pi pi-times text-[10px]"></i>
+              + Hozzáadás
             </button>
-          </span>
+          </div>
+          <div v-if="form.colors.length > 0" class="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span class="text-[11px] font-semibold text-slate-400 mr-1">Kiválasztva:</span>
+            <span
+              v-for="(color, idx) in form.colors"
+              :key="color"
+              class="inline-flex items-center gap-1.5 bg-orange-50 text-orange-800 border border-orange-200 text-xs font-semibold px-2.5 py-0.5 rounded-lg"
+            >
+              <span>{{ color }}</span>
+              <button
+                type="button"
+                @click="removeColor(idx)"
+                class="text-orange-400 hover:text-rose-600 cursor-pointer"
+                title="Szín eltávolítása"
+              >
+                <i class="pi pi-times text-[10px]"></i>
+              </button>
+            </span>
+          </div>
         </div>
-      </div>
 
-      <!-- Súly + Beszerzési ár + Eladási ár -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="space-y-1.5">
-          <label class="block text-xs font-medium text-slate-600">Súly (kg) *</label>
+        <!-- Színváltozat képe(i) (URL) -->
+        <div class="space-y-2">
+          <label class="block text-xs font-medium text-slate-600">
+            Színváltozat képe(i) (URL)
+          </label>
+          <div class="flex gap-2">
+            <input
+              v-model="newImageUrl"
+              type="url"
+              maxlength="2048"
+              placeholder="https://pelda.hu/szinvaltozat-kep.jpg"
+              @keydown.enter.prevent="addImageUrl()"
+              class="flex-1 h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-orange-500"
+            />
+            <button
+              type="button"
+              @click="addImageUrl()"
+              class="h-9 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer transition"
+            >
+              + Kép URL
+            </button>
+          </div>
+          <div v-if="form.imageUrls.length > 0" class="flex flex-wrap gap-2 pt-1">
+            <div
+              v-for="(url, idx) in form.imageUrls"
+              :key="url"
+              class="relative w-16 h-16 aspect-square rounded-xl border border-slate-200 bg-white overflow-hidden group shrink-0"
+              :title="url"
+            >
+              <img
+                :src="url"
+                :alt="`Színváltozat kép ${idx + 1}`"
+                class="w-full h-full aspect-square object-contain bg-white"
+              />
+              <button
+                type="button"
+                @click="removeImageUrl(idx)"
+                class="absolute top-1 right-1 w-5 h-5 rounded-full bg-slate-900/75 hover:bg-rose-600 text-white flex items-center justify-center cursor-pointer transition"
+                title="Kép eltávolítása"
+              >
+                <i class="pi pi-times text-[9px]"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Súly + Beszerzési ár + Eladási ár -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-slate-600">Súly (kg) *</label>
+            <input
+              v-model.number="form.weight"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-slate-600">Beszerzési ár (Ft) *</label>
+            <input
+              v-model.number="form.costPrice"
+              type="number"
+              min="0"
+              step="1"
+              required
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-slate-600">Eladási ár (Ft) *</label>
+            <input
+              v-model.number="form.price"
+              type="number"
+              min="0"
+              step="1"
+              required
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+          </div>
+        </div>
+
+        <!-- Aktív státusz -->
+        <label
+          class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 cursor-pointer"
+        >
+          <div>
+            <p class="text-xs font-semibold text-slate-900">Aktív variáns</p>
+            <p class="text-[11px] text-slate-500">
+              Inaktív variánsok nem választhatók új értékesítéshez.
+            </p>
+          </div>
           <input
-            v-model.number="form.weight"
-            type="number"
-            min="0"
-            step="0.01"
-            required
-            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+            v-model="form.isActive"
+            type="checkbox"
+            class="size-4 accent-slate-900 cursor-pointer"
           />
-        </div>
+        </label>
 
-        <div class="space-y-1.5">
-          <label class="block text-xs font-medium text-slate-600">Beszerzési ár (Ft) *</label>
-          <input
-            v-model.number="form.costPrice"
-            type="number"
-            min="0"
-            step="1"
-            required
-            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
-          />
+        <!-- Edit lábléc -->
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            @click="closeModal"
+            class="h-9 px-4 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition"
+          >
+            Mégse
+          </button>
+          <button
+            type="submit"
+            :disabled="saving"
+            class="h-9 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-xs font-semibold text-white flex items-center gap-2 cursor-pointer transition"
+          >
+            <i v-if="saving" class="pi pi-spin pi-spinner text-xs"></i>
+            <span>Mentés</span>
+          </button>
         </div>
+      </template>
 
-        <div class="space-y-1.5">
-          <label class="block text-xs font-medium text-slate-600">Eladási ár (Ft) *</label>
-          <input
-            v-model.number="form.price"
-            type="number"
-            min="0"
-            step="1"
-            required
-            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
-          />
-        </div>
-      </div>
+      <!-- ========================================================= -->
+      <!-- CREATE MODE: 1. LÉPÉS – Szín, súly és árak                 -->
+      <!-- ========================================================= -->
+      <template v-else-if="step === 1">
+        <div class="space-y-5">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">{{ WIZARD_STEPS[0]!.title }}</h3>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Add meg a közös tulajdonságokat, amelyek minden kijelölt méretre érvényesek lesznek.
+            </p>
+          </div>
 
-      <!-- CREATE MODE: Méretek kijelölése + SKU előtag + Generálandó variánsok -->
-      <template v-if="mode === 'create'">
-        <div class="border-t border-slate-100 pt-3 space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <label class="block text-xs font-bold text-slate-800">
-              Méretek kijelölése *
+          <!-- Színek -->
+          <div class="space-y-2.5">
+            <label class="block text-xs font-semibold text-slate-700">
+              Színek * <span class="font-normal text-slate-400">(kattints vagy írj be egyénit)</span>
             </label>
-            <div class="flex flex-wrap items-center gap-1">
+
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="quickColor in QUICK_COLORS"
+                :key="quickColor"
+                type="button"
+                @click="toggleQuickColor(quickColor)"
+                class="px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5"
+                :class="
+                  form.colors.includes(quickColor)
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                "
+              >
+                <i
+                  :class="
+                    form.colors.includes(quickColor)
+                      ? 'pi pi-check text-[10px]'
+                      : 'pi pi-plus text-[10px] text-slate-400'
+                  "
+                ></i>
+                <span>{{ quickColor }}</span>
+              </button>
+            </div>
+
+            <div class="flex gap-2">
+              <input
+                v-model="colorInput"
+                type="text"
+                maxlength="100"
+                placeholder="Egyéni szín (pl. Matt fekete, Terepmintás)..."
+                @keydown.enter.prevent="addColorsFromInput"
+                class="flex-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-orange-500"
+              />
+              <button
+                type="button"
+                @click="addColorsFromInput"
+                class="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer transition"
+              >
+                + Hozzáadás
+              </button>
+            </div>
+
+            <div v-if="form.colors.length > 0" class="flex flex-wrap items-center gap-1.5 pt-1">
+              <span class="text-[11px] font-semibold text-slate-400 mr-1">Kiválasztva:</span>
+              <span
+                v-for="(color, idx) in form.colors"
+                :key="color"
+                class="inline-flex items-center gap-1.5 bg-orange-50 text-orange-800 border border-orange-200 text-xs font-semibold px-2.5 py-1 rounded-lg"
+              >
+                <span>{{ color }}</span>
+                <button
+                  type="button"
+                  @click="removeColor(idx)"
+                  class="text-orange-400 hover:text-rose-600 cursor-pointer"
+                  title="Szín eltávolítása"
+                >
+                  <i class="pi pi-times text-[10px]"></i>
+                </button>
+              </span>
+            </div>
+          </div>
+
+          <!-- Színváltozat képe(i) (URL) -->
+          <div class="space-y-2.5">
+            <label class="block text-xs font-semibold text-slate-700">
+              Színváltozat képe(i) (URL)
+              <span class="font-normal text-slate-400">(opcionális, a kijelölt méretsorhoz)</span>
+            </label>
+            <div class="flex gap-2">
+              <input
+                v-model="newImageUrl"
+                type="url"
+                maxlength="2048"
+                placeholder="https://pelda.hu/szinvaltozat-kep.jpg"
+                @keydown.enter.prevent="addImageUrl()"
+                class="flex-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-orange-500"
+              />
+              <button
+                type="button"
+                @click="addImageUrl()"
+                class="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer transition"
+              >
+                + Kép URL
+              </button>
+            </div>
+            <div v-if="form.imageUrls.length > 0" class="flex flex-wrap gap-2 pt-1">
+              <div
+                v-for="(url, idx) in form.imageUrls"
+                :key="url"
+                class="relative w-16 h-16 aspect-square rounded-xl border border-slate-200 bg-white overflow-hidden group shrink-0"
+                :title="url"
+              >
+                <img
+                  :src="url"
+                  :alt="`Színváltozat kép ${idx + 1}`"
+                  class="w-full h-full aspect-square object-contain bg-white"
+                />
+                <button
+                  type="button"
+                  @click="removeImageUrl(idx)"
+                  class="absolute top-1 right-1 w-5 h-5 rounded-full bg-slate-900/75 hover:bg-rose-600 text-white flex items-center justify-center cursor-pointer transition"
+                  title="Kép eltávolítása"
+                >
+                  <i class="pi pi-times text-[9px]"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Súly + Beszerzési ár + Eladási ár -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="space-y-1.5">
+              <label class="block text-xs font-semibold text-slate-700">Súly (kg) *</label>
+              <input
+                v-model.number="form.weight"
+                type="number"
+                min="0"
+                step="0.01"
+                class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-xs font-semibold text-slate-700">Beszerzési ár (Ft) *</label>
+              <input
+                v-model.number="form.costPrice"
+                type="number"
+                min="0"
+                step="1"
+                class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-xs font-semibold text-slate-700">Eladási ár (Ft) *</label>
+              <input
+                v-model.number="form.price"
+                type="number"
+                min="0"
+                step="1"
+                class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+              />
+            </div>
+          </div>
+
+          <!-- Aktív státusz -->
+          <label
+            class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 cursor-pointer"
+          >
+            <div>
+              <p class="text-xs font-semibold text-slate-900">Aktív variánsok</p>
+              <p class="text-[11px] text-slate-500">
+                Inaktív variánsok nem választhatók új értékesítéshez.
+              </p>
+            </div>
+            <input
+              v-model="form.isActive"
+              type="checkbox"
+              class="size-4 accent-slate-900 cursor-pointer"
+            />
+          </label>
+        </div>
+
+        <!-- 1. lépés lábléc -->
+        <div class="flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
+          <button
+            type="button"
+            @click="closeModal"
+            class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition"
+          >
+            Mégse
+          </button>
+          <button
+            type="button"
+            @click="goToStep(2)"
+            class="h-10 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white flex items-center gap-2 cursor-pointer transition shadow-sm"
+          >
+            <span>Tovább a méretekhez</span>
+            <i class="pi pi-arrow-right text-[11px]"></i>
+          </button>
+        </div>
+      </template>
+
+      <!-- ========================================================= -->
+      <!-- CREATE MODE: 2. LÉPÉS – Méretek kiválasztása               -->
+      <!-- ========================================================= -->
+      <template v-else-if="step === 2">
+        <div class="space-y-5">
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">{{ WIZARD_STEPS[1]!.title }}</h3>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Használj gyors méretsor-sablont vagy válaszd ki egyenként a szükséges méreteket.
+              </p>
+            </div>
+          </div>
+
+          <!-- Gyors sablon gombok -->
+          <div class="space-y-2">
+            <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Gyors méretsor sablonok
+            </span>
+            <div class="flex flex-wrap items-center gap-1.5">
               <button
                 v-for="preset in SIZE_PRESETS"
                 :key="preset.label"
                 type="button"
                 @click="applySizePreset(preset.sizes)"
-                class="px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200/80 text-[11px] font-semibold cursor-pointer transition"
+                class="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200/80 text-xs font-semibold cursor-pointer transition"
               >
                 + {{ preset.label }}
               </button>
@@ -664,256 +1113,355 @@ async function handleSubmit() {
                 v-if="previewRows.length > 0"
                 type="button"
                 @click="clearSelectedSizes"
-                class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 text-[11px] font-semibold cursor-pointer transition"
+                class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 text-xs font-semibold cursor-pointer transition"
               >
                 Kijelölés törlése
               </button>
             </div>
           </div>
 
-          <!-- Ruházati / Betűs méretek -->
-          <div class="space-y-1.5">
-            <span class="block text-[11px] text-slate-400 font-medium">
-              Betűs méretek (ruházat, sisak, kesztyű):
-            </span>
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="sz in APPAREL_SIZES"
-                :key="sz"
-                type="button"
-                @click="toggleSize(sz)"
-                class="min-w-10 h-8 px-2.5 rounded-lg text-xs font-bold border transition cursor-pointer"
-                :class="
-                  isSizeSelected(sz)
-                    ? 'bg-orange-600 text-white border-orange-600 shadow-2xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                "
-              >
-                {{ sz }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Számozott méretek -->
-          <div class="space-y-1.5">
-            <span class="block text-[11px] text-slate-400 font-medium">
-              Számozott méretek (csizma, cipő, konfekció):
-            </span>
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="sz in NUMERIC_SIZES"
-                :key="sz"
-                type="button"
-                @click="toggleSize(sz)"
-                class="min-w-9 h-8 px-2 rounded-lg text-xs font-bold border transition cursor-pointer"
-                :class="
-                  isSizeSelected(sz)
-                    ? 'bg-orange-600 text-white border-orange-600 shadow-2xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                "
-              >
-                {{ sz }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Egyéni méret hozzáadása + SKU előtag -->
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
-            <div class="sm:col-span-5 space-y-1">
-              <label class="block text-[11px] font-medium text-slate-500">
-                Egyéni méret hozzáadása
-              </label>
-              <div class="flex gap-1.5">
-                <input
-                  v-model="customSizeInput"
-                  type="text"
-                  maxlength="50"
-                  placeholder="pl. 50, 52, 54, 10L"
-                  @keydown.enter.prevent="addCustomSize"
-                  class="flex-1 min-w-0 h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-xs text-slate-900 outline-none focus:border-orange-500"
-                />
+          <!-- Ruházat méretek -->
+          <div class="bg-slate-50/70 border border-slate-200/70 rounded-2xl p-4 space-y-4">
+            <div class="space-y-2">
+              <span class="block text-xs font-semibold text-slate-700">
+                Ruházat (betűs méretek, sisak, kesztyű)
+              </span>
+              <div class="grid grid-cols-6 sm:grid-cols-11 gap-1.5">
                 <button
+                  v-for="sz in APPAREL_SIZES"
+                  :key="sz"
                   type="button"
-                  @click="addCustomSize"
-                  class="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer transition"
+                  @click="toggleSize(sz)"
+                  class="h-9 rounded-xl text-xs font-bold border transition cursor-pointer"
+                  :class="
+                    isSizeSelected(sz)
+                      ? 'bg-orange-600 text-white border-orange-600 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  "
                 >
-                  + Egyéni méret
+                  {{ sz }}
                 </button>
               </div>
             </div>
 
-            <div class="sm:col-span-7 space-y-1">
-              <label class="block text-[11px] font-medium text-slate-500">
-                Automatikus SKU előtag
-              </label>
-              <div class="flex gap-1.5">
-                <input
-                  v-model="skuPrefix"
-                  type="text"
-                  maxlength="80"
-                  placeholder="pl. ALP-TGP-FEK"
-                  @input="onSkuPrefixInput"
-                  @keydown.enter.prevent
-                  class="flex-1 min-w-0 h-9 rounded-xl border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-900 outline-none focus:border-orange-500"
-                />
+            <!-- Számozott méretek -->
+            <div class="space-y-2 pt-2 border-t border-slate-200/70">
+              <span class="block text-xs font-semibold text-slate-700">
+                Számozott méretek (csizma, cipő, konfekció)
+              </span>
+              <div class="grid grid-cols-7 sm:grid-cols-13 gap-1.5">
                 <button
+                  v-for="sz in NUMERIC_SIZES"
+                  :key="sz"
                   type="button"
-                  @click="regenerateAllSkus"
-                  class="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer transition flex items-center gap-1"
-                  title="SKU előtag és sorok újragenerálása a gyártói kódból és színekből"
+                  @click="toggleSize(sz)"
+                  class="h-9 rounded-xl text-xs font-bold border transition cursor-pointer"
+                  :class="
+                    isSizeSelected(sz)
+                      ? 'bg-orange-600 text-white border-orange-600 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  "
                 >
-                  <i class="pi pi-refresh text-[11px]"></i>
-                  <span>SKU-k újragenerálása</span>
+                  {{ sz }}
                 </button>
               </div>
+            </div>
+          </div>
+
+          <!-- Egyéni méret hozzáadása -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-slate-700">
+              Egyéni méret hozzáadása
+            </label>
+            <div class="flex gap-2">
+              <input
+                v-model="customSizeInput"
+                type="text"
+                maxlength="50"
+                placeholder="pl. 50, 52, 54, 10L (vesszővel elválasztva több is megadható)"
+                @keydown.enter.prevent="addCustomSize"
+                class="flex-1 h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-900 outline-none focus:border-orange-500"
+              />
+              <button
+                type="button"
+                @click="addCustomSize"
+                class="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer transition"
+              >
+                + Egyéni méret
+              </button>
+            </div>
+          </div>
+
+          <!-- Kijelölt méretek összegzése -->
+          <div
+            class="rounded-2xl border px-4 py-3"
+            :class="
+              previewRows.length > 0
+                ? 'bg-emerald-50/50 border-emerald-200/80'
+                : 'bg-slate-50 border-dashed border-slate-200'
+            "
+          >
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="text-xs font-bold text-slate-800">
+                Kiválasztott méretek ({{ previewRows.length }} db)
+              </span>
+              <span v-if="previewRows.length === 0" class="text-[11px] text-slate-400">
+                Válassz legalább 1 méretet a fenti listából
+              </span>
+            </div>
+            <div v-if="previewRows.length > 0" class="flex flex-wrap gap-1.5">
+              <span
+                v-for="(row, idx) in previewRows"
+                :key="row.size"
+                class="inline-flex items-center gap-1.5 bg-white border border-emerald-200 text-slate-900 text-xs font-bold px-2.5 py-1 rounded-lg"
+              >
+                <span>{{ row.size }}</span>
+                <button
+                  type="button"
+                  @click="removePreviewRow(idx)"
+                  class="text-slate-400 hover:text-rose-600 cursor-pointer"
+                  title="Méret eltávolítása"
+                >
+                  <i class="pi pi-times text-[10px]"></i>
+                </button>
+              </span>
             </div>
           </div>
         </div>
 
-        <!-- Generálandó variánsok táblázata (Editable preview rows) -->
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-800">
-              Generálandó variánsok ({{ previewRows.length }} db)
-            </span>
-            <button
-              v-if="conflictingRowCount > 0"
-              type="button"
-              @click="removeExistingSkuRows"
-              class="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer"
-            >
-              Már létező SKU-k eltávolítása ({{ conflictingRowCount }})
-            </button>
-          </div>
-
-          <div
-            v-if="previewRows.length === 0"
-            class="py-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl text-xs text-slate-400"
+        <!-- 2. lépés lábléc -->
+        <div class="flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
+          <button
+            type="button"
+            @click="goToStep(1)"
+            class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition"
           >
-            Kattints fent a méretekre vagy válassz egy méretsor-sablont (pl. Ruházat XS–3XL)!
-          </div>
-
-          <div
-            v-else
-            class="max-h-60 overflow-y-auto border border-slate-200/90 rounded-2xl divide-y divide-slate-100"
+            <i class="pi pi-arrow-left text-[11px]"></i>
+            <span>Vissza</span>
+          </button>
+          <button
+            type="button"
+            @click="goToStep(3)"
+            class="h-10 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-white flex items-center gap-2 cursor-pointer transition shadow-sm"
           >
-            <div
-              v-for="(row, idx) in previewRows"
-              :key="row.size"
-              class="p-2.5 flex flex-wrap sm:flex-nowrap items-center gap-2 text-xs transition"
-              :class="
-                isSkuInExisting(row.sku) || isSkuDuplicateInBatch(row.sku, idx)
-                  ? 'bg-rose-50/70'
-                  : 'bg-white hover:bg-slate-50/60'
-              "
-            >
-              <!-- Méret badge -->
-              <span
-                class="w-12 text-center font-bold text-slate-900 bg-slate-100 px-2 py-1.5 rounded-lg shrink-0"
-              >
-                {{ row.size }}
-              </span>
-
-              <!-- Szerkeszthető SKU -->
-              <div class="flex-1 min-w-[160px]">
-                <input
-                  v-model="row.sku"
-                  type="text"
-                  maxlength="100"
-                  placeholder="Cikkszám (SKU) *"
-                  @input="onRowSkuInput(row)"
-                  @keydown.enter.prevent
-                  class="w-full h-8 rounded-lg border px-2.5 font-mono text-xs outline-none transition"
-                  :class="
-                    isSkuInExisting(row.sku) || isSkuDuplicateInBatch(row.sku, idx)
-                      ? 'border-rose-400 bg-white text-rose-800 focus:border-rose-600'
-                      : 'border-slate-200 bg-white text-slate-900 focus:border-orange-500'
-                  "
-                />
-                <p
-                  v-if="isSkuInExisting(row.sku)"
-                  class="text-[10px] font-semibold text-rose-600 mt-0.5"
-                >
-                  Ez az SKU már létezik ennél a terméknél!
-                </p>
-                <p
-                  v-else-if="isSkuDuplicateInBatch(row.sku, idx)"
-                  class="text-[10px] font-semibold text-amber-600 mt-0.5"
-                >
-                  Duplikált SKU a listában!
-                </p>
-              </div>
-
-              <!-- Opcionális elsődleges vonalkód (EAN) -->
-              <div class="w-44 shrink-0">
-                <input
-                  v-model="row.primaryBarcode"
-                  type="text"
-                  maxlength="100"
-                  placeholder="Vonalkód / EAN (opcionális)"
-                  @keydown.enter.prevent
-                  class="w-full h-8 rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-800 outline-none focus:border-orange-500"
-                />
-              </div>
-
-              <!-- Sor törlése -->
-              <button
-                type="button"
-                @click="removePreviewRow(idx)"
-                class="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center shrink-0 cursor-pointer transition"
-                title="Méret eltávolítása"
-              >
-                <i class="pi pi-trash text-xs"></i>
-              </button>
-            </div>
-          </div>
+            <span>Tovább az SKU-khoz</span>
+            <i class="pi pi-arrow-right text-[11px]"></i>
+          </button>
         </div>
       </template>
 
-      <!-- Aktív státusz -->
-      <label
-        class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 cursor-pointer"
-      >
-        <div>
-          <p class="text-xs font-semibold text-slate-900">
-            {{ mode === 'create' ? 'Aktív variánsok' : 'Aktív variáns' }}
-          </p>
-          <p class="text-[11px] text-slate-500">
-            Inaktív variánsok nem választhatók új értékesítéshez.
-          </p>
-        </div>
-        <input
-          v-model="form.isActive"
-          type="checkbox"
-          class="size-4 accent-slate-900 cursor-pointer"
-        />
-      </label>
+      <!-- ========================================================= -->
+      <!-- CREATE MODE: 3. LÉPÉS – Cikkszámok (SKU) és Vonalkódok     -->
+      <!-- ========================================================= -->
+      <template v-else>
+        <div class="space-y-5">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">{{ WIZARD_STEPS[2]!.title }}</h3>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Állítsd be az alap SKU-t és a méret-hozzáfűzés formátumát, majd igény szerint finomítsd a sorokat.
+            </p>
+          </div>
 
-      <!-- Lábléc gombok -->
-      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
-        <button
-          type="button"
-          @click="closeModal"
-          class="h-9 px-4 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition"
-        >
-          Mégse
-        </button>
-        <button
-          type="submit"
-          :disabled="saving || (mode === 'create' && previewRows.length === 0)"
-          class="h-9 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-xs font-semibold text-white flex items-center gap-2 cursor-pointer transition"
-        >
-          <i v-if="saving" class="pi pi-spin pi-spinner text-xs"></i>
-          <span v-if="mode === 'create'">
-            {{
-              previewRows.length > 0
-                ? `${previewRows.length} variáns létrehozása`
-                : 'Variánsok létrehozása'
-            }}
-          </span>
-          <span v-else>Mentés</span>
-        </button>
-      </div>
+          <!-- Alap SKU input -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-slate-700">
+              Alap SKU (gyártói kód + színkód)
+            </label>
+            <input
+              v-model="baseSku"
+              type="text"
+              maxlength="80"
+              placeholder="pl. 13102117421"
+              @keydown.enter.prevent
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+            <p class="text-[11px] text-slate-500">
+              Írd a gyártói kód mögé a színkódot (pl. <span class="font-mono">13102117</span> +
+              <span class="font-mono">421</span> → <span class="font-mono font-semibold">13102117421</span>)
+            </p>
+          </div>
+
+          <!-- Méret hozzáfűzési mód (3-way selector élő példával) -->
+          <div class="space-y-2">
+            <label class="block text-xs font-semibold text-slate-700">
+              Méret hozzáfűzési mód
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                v-for="opt in SKU_FORMAT_OPTIONS"
+                :key="opt.value"
+                type="button"
+                @click="selectSkuFormat(opt.value)"
+                class="p-3 rounded-xl border text-left transition cursor-pointer space-y-1"
+                :class="
+                  skuFormat === opt.value
+                    ? 'bg-orange-50/80 border-orange-400 shadow-2xs'
+                    : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                "
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-xs font-bold text-slate-900">
+                    {{ opt.codeLabel }}
+                  </span>
+                  <span
+                    class="w-4 h-4 rounded-full border flex items-center justify-center"
+                    :class="
+                      skuFormat === opt.value
+                        ? 'border-orange-600 bg-orange-600 text-white'
+                        : 'border-slate-300 bg-white'
+                    "
+                  >
+                    <i v-if="skuFormat === opt.value" class="pi pi-check text-[9px]"></i>
+                  </span>
+                </div>
+                <p class="text-[11px] text-slate-600 font-medium">{{ opt.description }}</p>
+                <p
+                  class="font-mono text-[11px] font-semibold truncate pt-0.5"
+                  :class="skuFormat === opt.value ? 'text-orange-800' : 'text-slate-400'"
+                >
+                  pl. {{ buildRowSku(sampleBaseSku, opt.value, sampleSize) }}
+                </p>
+              </button>
+            </div>
+          </div>
+
+          <!-- Előnézeti táblázat -->
+          <div class="space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-bold text-slate-800">
+                Előnézeti táblázat ({{ previewRows.length }} variáns)
+              </span>
+              <div class="flex items-center gap-3">
+                <button
+                  v-if="hasManualRowEdits"
+                  type="button"
+                  @click="resetAllRowSkusToAuto"
+                  class="text-[11px] font-semibold text-slate-600 hover:text-slate-900 hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <i class="pi pi-refresh text-[10px]"></i>
+                  <span>SKU-k újragenerálása</span>
+                </button>
+                <button
+                  v-if="existingConflictCount > 0"
+                  type="button"
+                  @click="removeExistingSkuRows"
+                  class="text-[11px] font-semibold text-rose-600 hover:underline cursor-pointer"
+                >
+                  Már létező SKU-k eltávolítása ({{ existingConflictCount }})
+                </button>
+              </div>
+            </div>
+
+            <div
+              v-if="previewRows.length === 0"
+              class="py-6 text-center bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl text-xs text-slate-400"
+            >
+              Nincs kiválasztott méret. Lépj vissza és jelölj ki legalább egy méretet!
+            </div>
+
+            <div
+              v-else
+              class="max-h-64 overflow-y-auto border border-slate-200/90 rounded-2xl divide-y divide-slate-100"
+            >
+              <div
+                v-for="(row, idx) in previewRows"
+                :key="row.size"
+                class="p-2.5 flex flex-wrap sm:flex-nowrap items-center gap-2.5 text-xs transition"
+                :class="
+                  isSkuInExisting(row.sku) || isSkuDuplicateInBatch(row.sku, idx)
+                    ? 'bg-rose-50/70'
+                    : 'bg-white hover:bg-slate-50/60'
+                "
+              >
+                <!-- Méret badge -->
+                <span
+                  class="w-12 text-center font-bold text-slate-900 bg-slate-100 px-2 py-1.5 rounded-lg shrink-0"
+                >
+                  {{ row.size }}
+                </span>
+
+                <!-- Szerkeszthető SKU -->
+                <div class="flex-1 min-w-[170px]">
+                  <input
+                    v-model="row.sku"
+                    type="text"
+                    maxlength="100"
+                    placeholder="Cikkszám (SKU) *"
+                    @input="onRowSkuInput(row)"
+                    @keydown.enter.prevent
+                    class="w-full h-9 rounded-lg border px-2.5 font-mono text-xs outline-none transition"
+                    :class="
+                      isSkuInExisting(row.sku) || isSkuDuplicateInBatch(row.sku, idx)
+                        ? 'border-rose-400 bg-white text-rose-800 focus:border-rose-600'
+                        : 'border-slate-200 bg-white text-slate-900 focus:border-orange-500'
+                    "
+                  />
+                  <p
+                    v-if="isSkuInExisting(row.sku)"
+                    class="text-[10px] font-semibold text-rose-600 mt-0.5"
+                  >
+                    Ez az SKU már létezik ennél a terméknél!
+                  </p>
+                  <p
+                    v-else-if="isSkuDuplicateInBatch(row.sku, idx)"
+                    class="text-[10px] font-semibold text-amber-600 mt-0.5"
+                  >
+                    Duplikált SKU a listában!
+                  </p>
+                </div>
+
+                <!-- Opcionális elsődleges vonalkód (EAN) -->
+                <div class="w-48 shrink-0">
+                  <input
+                    v-model="row.primaryBarcode"
+                    type="text"
+                    maxlength="100"
+                    placeholder="Vonalkód / EAN (opcionális)"
+                    @keydown.enter.prevent
+                    class="w-full h-9 rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-800 outline-none focus:border-orange-500"
+                  />
+                </div>
+
+                <!-- Sor törlése -->
+                <button
+                  type="button"
+                  @click="removePreviewRow(idx)"
+                  class="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center shrink-0 cursor-pointer transition"
+                  title="Sor eltávolítása"
+                >
+                  <i class="pi pi-trash text-xs"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. lépés lábléc -->
+        <div class="flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
+          <button
+            type="button"
+            @click="goToStep(2)"
+            class="h-10 px-4 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition"
+          >
+            <i class="pi pi-arrow-left text-[11px]"></i>
+            <span>Vissza</span>
+          </button>
+          <button
+            type="submit"
+            :disabled="saving || previewRows.length === 0"
+            class="h-10 px-5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-xs font-semibold text-white flex items-center gap-2 cursor-pointer transition shadow-sm"
+          >
+            <i v-if="saving" class="pi pi-spin pi-spinner text-xs"></i>
+            <span>
+              {{
+                previewRows.length > 0
+                  ? `${previewRows.length} variáns létrehozása`
+                  : 'Variánsok létrehozása'
+              }}
+            </span>
+          </button>
+        </div>
+      </template>
     </form>
   </Dialog>
 </template>

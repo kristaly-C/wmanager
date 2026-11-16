@@ -9,6 +9,7 @@ export interface LocationItem {
   type: LocationType
   slotMode?: SlotMode | null
   isActive: boolean
+  isAssigned?: boolean
   createdAt: string
   updatedAt: string
 }

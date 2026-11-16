@@ -66,6 +66,7 @@ export interface Variant {
     colors: string[];
     size: string;
     weight: number;
+    imageUrls: string[];
 
     price: number;
     costPrice?: number;
