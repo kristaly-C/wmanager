@@ -9,7 +9,7 @@ import { UpdateBrandDto } from "./dto/update-brand.dto";
 
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller('brand')
+@Controller('brands')
 export class BrandController {
     constructor(private brandService: BrandService) {}
 

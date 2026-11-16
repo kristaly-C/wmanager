@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ProductsTab from '@/components/catalog/ProductsTab.vue'
-import CategoriesView from '@/views/CategoriesView.vue' // Ideiglenesen, amíg át nem alakítjuk!
+import CategoriesView from '@/views/CategoriesView.vue'
+import BrandsTab from '@/components/catalog/BrandsTab.vue'
+import SuppliersTab from '@/components/catalog/SuppliersTab.vue'
 
 type CatalogTab = 'products' | 'categories' | 'brands' | 'suppliers'
 
@@ -41,8 +43,7 @@ const tabs: { id: CatalogTab; label: string; icon: string }[] = [
     <!-- AKTÍV FÜL TARTALMA -->
     <ProductsTab v-if="activeTab === 'products'" />
     <CategoriesView v-else-if="activeTab === 'categories'" />
-    <div v-else class="bg-white rounded-3xl p-12 text-center text-slate-400 border border-white shadow-sm">
-      Ez a fül ({{ activeTab }}) hamarosan elkészül!
-    </div>
+    <BrandsTab v-else-if="activeTab === 'brands'" />
+    <SuppliersTab v-else-if="activeTab === 'suppliers'" />
   </div>
 </template>

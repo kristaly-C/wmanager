@@ -2,13 +2,13 @@
 
 > Ez a dokumentum az MVP (Minimum Viable Product) fejlesztési sorrendjét és aktuális készültségi állapotát követi nyomon. Minden lezárt részfeladatnál pipáld ki (`[x]`) az adott sort, és frissítsd az „Aktuális fókusz” részt.
 >
-> Utolsó frissítés: 2026-11-13
+> Utolsó frissítés: 2026-11-16
 
 ---
 
 ## Aktuális fókusz
 
-- **Következő lépés:** **2. Mérföldkő – Katalógus és Termékek kezelése** (`ProductsTab.vue`, `CategoriesView.vue`, `Brands`, `Suppliers`, `Variant` + `VariantBarcode` UI)
+- **Következő lépés:** **3. Mérföldkő – Pozíció szerinti készlet és Bevételezés** (`stock.ts`, készletlista nézet, készletfelvitel/korrekció pozícióra, `ProductsTab.vue` Készlet fül, `PurchaseOrder` bevételezés)
 - **MVP célok röviden:**
   1. Raktár és pozíciók (`WAREHOUSE` / `STORE` → `ZONE` → `SHELF` → `BIN`) könnyű létrehozása és kezelése.
   2. Termékek, variánsok és vonalkódok kezelése.
@@ -32,8 +32,8 @@
 - [x] Bejelentkezés + QR-kódos raktári átjelentkezés (`LoginView.vue`, `MainLayout.vue`, `MyQrBadgeModal.vue`)
 - [x] Felhasználók kezelése és lokációhoz rendelése (`UsersView.vue`)
 - [x] Lokáció API kliens (`src/api/locations.ts`)
-- [x] Kategóriák alap lista (`CategoriesView.vue` – létrehozás/szerkesztés dialógus még hátravan)
-- [x] Katalógus és termékadatlap UI váz (`CatalogView.vue`, `ProductsTab.vue` – jelenleg mintaadatokkal)
+- [x] Kategóriák kezelése (`CategoriesView.vue` – teljes CRUD hierarchia-választással)
+- [x] Katalógus és termékadatlap (`CatalogView.vue`, `ProductsTab.vue`, `BrandsTab.vue`, `SuppliersTab.vue`)
 
 ---
 
@@ -60,16 +60,16 @@
 
 ### Backend (`apps/backend`)
 - [x] `Brand`, `Category`, `Supplier`, `Product`, `Variant`, `VariantBarcode` végpontok
-- [ ] Ellenőrzés: a `Product` lista válasz tartalmazza-e a `total` elemszámot a `:lazy="true"` PrimeVue lapozáshoz (ha szükséges, `{ items, total }` bővítés)
+- [x] Ellenőrzés: a `Product` lista válasz tartalmazza-e a `total` elemszámot a `:lazy="true"` PrimeVue lapozáshoz (ha szükséges, `{ items, total }` bővítés)
 
 ### Frontend (`apps/frontend`)
-- [ ] Frontend API kliensek létrehozása (`products.ts`, `variants.ts`, `brands.ts`, `suppliers.ts`)
-- [ ] `CategoriesView.vue` kiegészítése létrehozás / szerkesztés / törlés dialógussal (fa/szülő választással)
-- [ ] `Brands` és `Suppliers` fülek megvalósítása a `CatalogView.vue`-ban (jelenleg placeholder)
-- [ ] `ProductsTab.vue` bekötése valódi API-ra (mintaadatok kiváltása, szerveroldali keresés ~300 ms debounce-szal és lapozással)
-- [ ] Termék létrehozása / szerkesztése modal
-- [ ] Variánsok CRUD a termékadatlapon (szín, méret, SKU, ár, `costPrice` szerepkör szerinti elrejtésével)
-- [ ] Vonalkódok kezelése variánsonként (`VariantBarcode` hozzáadása, elsődleges jelölés, törlés)
+- [x] Frontend API kliensek létrehozása (`products.ts`, `variants.ts`, `brands.ts`, `suppliers.ts`)
+- [x] `CategoriesView.vue` kiegészítése létrehozás / szerkesztés / törlés dialógussal (fa/szülő választással)
+- [x] `Brands` és `Suppliers` fülek megvalósítása a `CatalogView.vue`-ban (jelenleg placeholder)
+- [x] `ProductsTab.vue` bekötése valódi API-ra (mintaadatok kiváltása, szerveroldali keresés ~300 ms debounce-szal és lapozással)
+- [x] Termék létrehozása / szerkesztése modal
+- [x] Variánsok CRUD a termékadatlapon (szín, méret, SKU, ár, `costPrice` szerepkör szerinti elrejtésével)
+- [x] Vonalkódok kezelése variánsonként (`VariantBarcode` hozzáadása, elsődleges jelölés, törlés)
 
 ---
 
