@@ -40,6 +40,11 @@ export class CreateProductDto {
     @MaxLength(500)
     functionality?: string;
 
+    @IsString()
+    @IsOptional()
+    @MaxLength(5000)
+    description?: string;
+
     @IsNumber()
     @Min(0)
     @Max(100)

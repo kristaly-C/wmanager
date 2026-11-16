@@ -151,6 +151,7 @@ function mapVariantToQuickInfo(v: VariantItem): QuickProductInfo {
     manufacturerCode: v.product?.manufacturerCode,
     model: v.product?.model,
     material: v.product?.material ?? null,
+    description: v.product?.description ?? null,
     stockBreakdown,
   }
 }
@@ -800,6 +801,15 @@ onUnmounted(() => {
               </dd>
             </div>
           </dl>
+          <div
+            v-if="searchStore.activeProductSheet.description"
+            class="mt-3 pt-3 border-t border-slate-100"
+          >
+            <span class="text-xs text-slate-400 block mb-1">Termékleírás</span>
+            <p class="text-xs text-slate-700 whitespace-pre-line leading-relaxed max-h-32 overflow-y-auto">
+              {{ searchStore.activeProductSheet.description }}
+            </p>
+          </div>
         </div>
       </div>
 

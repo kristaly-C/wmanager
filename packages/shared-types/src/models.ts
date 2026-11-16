@@ -10,7 +10,7 @@ export interface Product {
     model: string;
     manufacturerCode: string;
     functionality: string;
-
+    description?: string;
     vatRate: number;
 
     primarySupplierId: string;

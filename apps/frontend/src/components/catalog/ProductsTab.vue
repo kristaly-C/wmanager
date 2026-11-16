@@ -1033,6 +1033,16 @@ onBeforeUnmount(() => {
             {{ selectedProduct.functionality || '—' }}
           </span>
         </div>
+        <div class="sm:col-span-3 pt-2 border-t border-slate-100">
+          <span class="text-xs text-slate-400 block mb-1">Termékleírás</span>
+          <p
+            v-if="selectedProduct.description"
+            class="text-sm text-slate-700 whitespace-pre-line leading-relaxed bg-slate-50/70 rounded-2xl p-3.5 border border-slate-100"
+          >
+            {{ selectedProduct.description }}
+          </p>
+          <span v-else class="text-sm font-semibold text-slate-400">—</span>
+        </div>
       </div>
 
       <!-- FÜL 2: VARIÁNSOK & ÁRAK -->

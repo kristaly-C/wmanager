@@ -39,6 +39,7 @@ const form = ref({
   material: '',
   usageArea: '',
   functionality: '',
+  description: '',
   imageUrls: [] as string[],
   isActive: true,
 })
@@ -108,6 +109,7 @@ watch(
         material: p.material ?? '',
         usageArea: p.usageArea ?? '',
         functionality: p.functionality ?? '',
+        description: p.description ?? '',
         imageUrls: Array.isArray(p.imageUrls) ? [...p.imageUrls] : [],
         isActive: p.isActive,
       }
@@ -124,6 +126,7 @@ watch(
         material: '',
         usageArea: '',
         functionality: '',
+        description: '',
         imageUrls: [],
         isActive: true,
       }
@@ -254,6 +257,7 @@ async function handleSubmit() {
     material: form.value.material.trim() || undefined,
     usageArea: form.value.usageArea.trim() || undefined,
     functionality: form.value.functionality.trim() || undefined,
+    description: form.value.description.trim() || undefined,
     imageUrls: form.value.imageUrls,
     isActive: form.value.isActive,
   }
@@ -451,6 +455,18 @@ async function handleSubmit() {
             class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
           />
         </div>
+      </div>
+
+      <!-- Termékleírás (description) -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-medium text-slate-600">Termékleírás</label>
+        <textarea
+          v-model="form.description"
+          rows="4"
+          maxlength="5000"
+          placeholder="Részletes termékleírás (webshophoz és eladói tájékoztatáshoz)..."
+          class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-orange-500 resize-y"
+        ></textarea>
       </div>
 
       <!-- Képek (imageUrls) -->

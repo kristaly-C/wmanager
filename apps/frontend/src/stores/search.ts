@@ -27,6 +27,7 @@ export interface QuickProductInfo {
     manufacturerCode?: string
     model?: string
     material?: string | null
+    description?: string | null
     stockBreakdown?: QuickStockBreakdown[]
 }
 

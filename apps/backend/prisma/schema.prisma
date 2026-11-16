@@ -131,7 +131,8 @@ model Product {
    functionality String?
    variants Variant[]
    vatRate Decimal @db.Decimal(5, 2)
-  
+   description String?
+
    primarySupplierId String
    primarySupplier Supplier @relation(fields: [primarySupplierId], references: [id])
    imageUrls String[]

@@ -12,6 +12,7 @@ export interface ProductListItem {
   model: string
   manufacturerCode: string
   functionality?: string | null
+  description?: string | null
   vatRate: number | string
   imageUrls: string[]
   attributes?: Record<string, string> | null
@@ -40,6 +41,7 @@ export interface CreateProductPayload {
   model: string
   manufacturerCode: string
   functionality?: string
+  description?: string
   vatRate: number
   imageUrls: string[]
   attributes?: Record<string, string>
