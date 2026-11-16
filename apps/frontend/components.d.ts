@@ -27,6 +27,8 @@ declare module 'vue' {
     StockAdjustModal: typeof import('./src/components/inventory/StockAdjustModal.vue')['default']
     StockItemsTab: typeof import('./src/components/inventory/StockItemsTab.vue')['default']
     StockMovementsTab: typeof import('./src/components/inventory/StockMovementsTab.vue')['default']
+    StockReportModal: typeof import('./src/components/inventory/StockReportModal.vue')['default']
+    StockReportsTab: typeof import('./src/components/inventory/StockReportsTab.vue')['default']
     SuppliersTab: typeof import('./src/components/catalog/SuppliersTab.vue')['default']
     VariantBarcodesModal: typeof import('./src/components/catalog/VariantBarcodesModal.vue')['default']
     VariantFormModal: typeof import('./src/components/catalog/VariantFormModal.vue')['default']

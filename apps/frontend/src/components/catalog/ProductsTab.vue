@@ -14,6 +14,7 @@ import ProductFormModal from './ProductFormModal.vue'
 import VariantFormModal from './VariantFormModal.vue'
 import VariantBarcodesModal from './VariantBarcodesModal.vue'
 import StockAdjustModal from '@/components/inventory/StockAdjustModal.vue'
+import StockReportModal from '@/components/inventory/StockReportModal.vue'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
 
@@ -94,6 +95,12 @@ let stockAbortController: AbortController | null = null
 const isStockAdjustModalOpen = ref(false)
 const adjustInitialLocationId = ref<string | null>(null)
 const adjustInitialVariantId = ref<string | null>(null)
+
+// Modal állapot – Hiány / eltérés jelentése
+const isStockReportModalOpen = ref(false)
+const reportInitialLocationId = ref<string | null>(null)
+const reportInitialVariantId = ref<string | null>(null)
+const reportInitialExpectedQty = ref<number | null>(null)
 
 // Modal állapotok – Termék
 const isProductModalOpen = ref(false)
@@ -588,6 +595,13 @@ function openStockAdjustModal(locationId: string | null = null, variantId: strin
   adjustInitialVariantId.value =
     variantId ?? (variants.value.length === 1 ? (variants.value[0]?.id ?? null) : null)
   isStockAdjustModalOpen.value = true
+}
+
+function openStockReportModal(locationId: string, variantId: string, expectedQty: number) {
+  reportInitialLocationId.value = locationId
+  reportInitialVariantId.value = variantId
+  reportInitialExpectedQty.value = expectedQty
+  isStockReportModalOpen.value = true
 }
 
 async function onStockAdjusted() {
@@ -1338,14 +1352,24 @@ onBeforeUnmount(() => {
                       </span>
                     </td>
                     <td v-if="canAdjustStock" class="py-3 text-right whitespace-nowrap">
-                      <button
-                        v-if="!item.isExternalLocation"
-                        type="button"
-                        @click="openStockAdjustModal(item.locationId, item.variantId)"
-                        class="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 cursor-pointer transition"
-                      >
-                        Korrekció
-                      </button>
+                      <div v-if="!item.isExternalLocation" class="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          @click="openStockAdjustModal(item.locationId, item.variantId)"
+                          class="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 cursor-pointer transition"
+                        >
+                          Áthelyezés / Korrekció
+                        </button>
+                        <button
+                          type="button"
+                          @click="openStockReportModal(item.locationId, item.variantId, item.quantity)"
+                          class="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50/70 hover:bg-amber-100 text-[11px] font-semibold text-amber-800 inline-flex items-center gap-1 cursor-pointer transition"
+                          title="Hiány / eltérés jelentése ezen a pozíción"
+                        >
+                          <i class="pi pi-exclamation-triangle text-[10px]"></i>
+                          <span>Hiány jelentése</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -1554,6 +1578,16 @@ onBeforeUnmount(() => {
       v-model:visible="isStockAdjustModalOpen"
       :initial-location-id="adjustInitialLocationId"
       :initial-variant-id="adjustInitialVariantId"
+      :all-locations="locations"
+      @saved="onStockAdjusted"
+    />
+
+    <!-- Hiány / eltérés jelentése Modal -->
+    <StockReportModal
+      v-model:visible="isStockReportModalOpen"
+      :initial-variant-id="reportInitialVariantId"
+      :initial-location-id="reportInitialLocationId"
+      :initial-expected-qty="reportInitialExpectedQty"
       :all-locations="locations"
       @saved="onStockAdjusted"
     />

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { LocationType, Role, SlotMode } from '@wmanager/shared-types'
 import { useAuthStore } from '@/stores/auth'
 import { locationApi, type BulkCreateLocationsResult, type LocationItem } from '@/api/locations'
+import { stockApi } from '@/api/stock'
 import {
   LOCATION_TYPE_META,
   SLOT_MODE_META,
@@ -14,11 +15,12 @@ import LocationFormModal from '@/components/inventory/LocationFormModal.vue'
 import LocationBulkModal from '@/components/inventory/LocationBulkModal.vue'
 import StockItemsTab from '@/components/inventory/StockItemsTab.vue'
 import StockMovementsTab from '@/components/inventory/StockMovementsTab.vue'
+import StockReportsTab from '@/components/inventory/StockReportsTab.vue'
 import StockAdjustModal from '@/components/inventory/StockAdjustModal.vue'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
 
-type InventoryTab = 'locations' | 'stock' | 'movements'
+type InventoryTab = 'locations' | 'stock' | 'movements' | 'reports'
 
 interface FlatTreeRow {
   location: LocationItem
@@ -37,7 +39,10 @@ const tabs: { id: InventoryTab; label: string; icon: string }[] = [
   { id: 'locations', label: 'Pozíciók & Térkép', icon: 'pi pi-sitemap' },
   { id: 'stock', label: 'Készlet áttekintés', icon: 'pi pi-box' },
   { id: 'movements', label: 'Mozgási napló', icon: 'pi pi-history' },
+  { id: 'reports', label: 'Eltérés-jelentések', icon: 'pi pi-exclamation-triangle' },
 ]
+
+const pendingReportsCount = ref(0)
 
 const locations = ref<LocationItem[]>([])
 const loading = ref(false)
@@ -464,8 +469,23 @@ function formatDate(dateStr?: string | null): string {
   })
 }
 
+async function loadPendingReportsCount() {
+  const role = authStore.user?.role
+  if (role === Role.ORDER_CLERK || role === Role.RMA_CLERK) {
+    pendingReportsCount.value = 0
+    return
+  }
+  try {
+    const res = await stockApi.getReports({ status: 'PENDING' })
+    pendingReportsCount.value = res.data.length
+  } catch {
+    pendingReportsCount.value = 0
+  }
+}
+
 onMounted(() => {
   loadLocations()
+  void loadPendingReportsCount()
 })
 </script>
 
@@ -488,6 +508,17 @@ onMounted(() => {
         >
           <i :class="[tab.icon, 'text-xs']"></i>
           <span>{{ tab.label }}</span>
+          <span
+            v-if="tab.id === 'reports' && pendingReportsCount > 0"
+            class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold"
+            :class="
+              activeTab === tab.id
+                ? 'bg-[#f46714] text-white'
+                : 'bg-amber-100 text-amber-800'
+            "
+          >
+            {{ pendingReportsCount }}
+          </span>
         </button>
       </div>
     </div>
@@ -1119,11 +1150,18 @@ onMounted(() => {
       v-else-if="activeTab === 'stock'"
       :allLocations="locations"
       :canAdjustStock="canAdjustStock"
+      @report-created="loadPendingReportsCount"
     />
 
     <StockMovementsTab
       v-else-if="activeTab === 'movements'"
       :allLocations="locations"
+    />
+
+    <StockReportsTab
+      v-else-if="activeTab === 'reports'"
+      :allLocations="locations"
+      @resolved="loadPendingReportsCount"
     />
 
     <StockAdjustModal

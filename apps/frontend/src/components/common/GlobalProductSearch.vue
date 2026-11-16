@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { Role } from '@wmanager/shared-types'
+import { useAuthStore } from '@/stores/auth'
 import {
   useSearchStore,
   type QuickProductInfo,
@@ -8,9 +10,28 @@ import {
 import { variantApi, type VariantItem } from '@/api/variants'
 import { locationApi, type LocationItem } from '@/api/locations'
 import { extractApiError, getLocationPath } from '@/utils/locationMeta'
+import StockReportModal from '@/components/inventory/StockReportModal.vue'
 import Dialog from 'primevue/dialog'
 
+const authStore = useAuthStore()
 const searchStore = useSearchStore()
+
+const canReportStock = computed(() => {
+  const role = authStore.user?.role
+  return (
+    role === Role.ADMIN ||
+    role === Role.BOSS ||
+    role === Role.WAREHOUSE_MANAGER ||
+    role === Role.STORE_MANAGER ||
+    role === Role.WAREHOUSE_STAFF ||
+    role === Role.STORE_STAFF
+  )
+})
+
+const isStockReportModalOpen = ref(false)
+const reportInitialVariantId = ref<string | null>(null)
+const reportInitialLocationId = ref<string | null>(null)
+const reportInitialExpectedQty = ref<number | null>(null)
 const searchQuery = ref('')
 const selectedIndex = ref(0)
 const copiedSku = ref<string | null>(null)
@@ -34,6 +55,37 @@ let lastCompletedQuery = ''
 let hasSearchedOnce = false
 
 const locationById = computed(() => new Map(allLocations.value.map((l) => [l.id, l])))
+
+function isExternalBreakdownLocation(locationId: string): boolean {
+  const loc = locationById.value.get(locationId)
+  if (loc && loc.isAssigned === false) return true
+  const activeId = searchStore.activeProductSheet?.id
+  if (activeId) {
+    const raw =
+      rawSiblingVariants.value.find((v) => v.id === activeId) ??
+      rawResults.value.find((v) => v.id === activeId)
+    const si = raw?.stockItems?.find((s) => s.locationId === locationId)
+    if (si?.isExternalLocation) return true
+  }
+  return false
+}
+
+async function openStockReportFromSheet(row: QuickStockBreakdown) {
+  const active = searchStore.activeProductSheet
+  if (!active) return
+  await ensureLocationsLoaded()
+  reportInitialVariantId.value = active.id
+  reportInitialLocationId.value = row.locationId
+  reportInitialExpectedQty.value = row.totalQty
+  isStockReportModalOpen.value = true
+}
+
+function onStockReportSaved() {
+  const productId = searchStore.activeProductSheet?.productId
+  if (productId) {
+    void fetchSiblingVariants(productId)
+  }
+}
 
 async function ensureLocationsLoaded() {
   if (locationsLoaded) return
@@ -282,6 +334,11 @@ function handleKeydown(e: KeyboardEvent) {
   }
 
   if (e.key === 'Escape') {
+    if (isStockReportModalOpen.value) {
+      e.preventDefault()
+      isStockReportModalOpen.value = false
+      return
+    }
     if (searchStore.isProductSheetOpen) {
       e.preventDefault()
       searchStore.closeProductSheet()
@@ -669,7 +726,7 @@ onUnmounted(() => {
               class="flex items-center justify-between gap-3 py-2.5 text-sm"
             >
               <span class="font-medium text-slate-800">{{ row.locationName }}</span>
-              <div class="flex items-center gap-2 shrink-0 text-xs">
+              <div class="flex flex-wrap items-center justify-end gap-1.5 shrink-0 text-xs">
                 <span
                   class="font-bold px-2 py-0.5 rounded-md"
                   :class="
@@ -685,6 +742,16 @@ onUnmounted(() => {
                 >
                   {{ row.reservedQty }} db foglalt
                 </span>
+                <button
+                  v-if="canReportStock && !isExternalBreakdownLocation(row.locationId)"
+                  type="button"
+                  @click="openStockReportFromSheet(row)"
+                  class="px-2 py-0.5 rounded-md border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold inline-flex items-center gap-1 cursor-pointer transition"
+                  title="Hiány / eltérés jelentése ezen a pozíción"
+                >
+                  <i class="pi pi-exclamation-triangle text-[10px]"></i>
+                  <span>Hiány jelentése</span>
+                </button>
               </div>
             </div>
           </div>
@@ -788,4 +855,14 @@ onUnmounted(() => {
       </div>
     </div>
   </Dialog>
+
+  <!-- 3. HIÁNY / ELTÉRÉS JELENTÉSE MODAL (F5 Termék Törzslapból indítva) -->
+  <StockReportModal
+    v-model:visible="isStockReportModalOpen"
+    :initial-variant-id="reportInitialVariantId"
+    :initial-location-id="reportInitialLocationId"
+    :initial-expected-qty="reportInitialExpectedQty"
+    :all-locations="allLocations"
+    @saved="onStockReportSaved"
+  />
 </template>

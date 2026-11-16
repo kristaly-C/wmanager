@@ -86,6 +86,9 @@
 - [x] A `ProductsTab.vue` *„Készlet”* al-fülének bekötése (mutassa, melyik pozíción hány darab van az adott termék variánsaiból)
 - [x] Készletmozgási napló (`/movements`) megjelenítése
 - [x] Kereszt-telephelyi készlet betekintés (cross-location stock visibility): nem hozzárendelt telephelyek gyökér szintű (`WAREHOUSE`/`STORE`) aggregált olvasása és szűrése read-only módban (`isAssigned: false`, `isExternalLocation: true`), írási műveletek és belső zónák/polcok szigorú védelmével mindkét rétegben
+- [x] Raktáron belüli pozíció-áthelyezés (`POST /stock/relocate`, `TRANSFER_OUT` + `TRANSFER_IN` `$transaction`-ben, `DEDICATED` védelem és 3-lépéses pozíció-áthelyező varázsló a `StockAdjustModal.vue`-ban)
+- [x] BOSS / ADMIN nyitókészlet-felvitel kapcsoló (`SystemSetting.initialStockEnabled`, `GET/PATCH /stock/settings`, backend tiltás ha inaktív, és vezérlőpulti toggle kártya a `DashboardView.vue`-ban)
+- [x] Polckészlet hiány és eltérés-jelentés (`StockReport` modell, `POST /stock/reports`, vezetői elbírálás `resolveReport` atomi készlet- és mozgásszinkronnal, `InventoryView.vue` 4. fül jelvénnyel, `F5` gyorsjelentés a `GlobalProductSearch.vue`-ban, és vezérlőpulti widget)
 
 ### 3/B. Bevételezés beérkezett áruhoz (`PurchaseOrder`)
 > **Elkerülhetetlen séma-bővítés:** a `prisma/schema.prisma`-ban a `PurchaseOrder` jelenleg csak fejléc (`supplierId`, `status`), még nincs hozzá `PurchaseOrderItem` tábla és NestJS modul.

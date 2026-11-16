@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { LocationType, MovementType, SlotMode } from '@wmanager/shared-types'
+import { LocationType, MovementType, Role, SlotMode } from '@wmanager/shared-types'
+import { useAuthStore } from '@/stores/auth'
 import type { LocationItem } from '@/api/locations'
 import { productApi, type ProductListItem } from '@/api/products'
-import { stockApi, type AdjustStockResult } from '@/api/stock'
+import { stockApi, type StockItemEntry } from '@/api/stock'
 import { variantApi, type VariantBarcodeItem, type VariantItem } from '@/api/variants'
 import { extractApiError, getLocationPath, LOCATION_TYPE_META } from '@/utils/locationMeta'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
 
 type WizardStep = 1 | 2 | 3
+type OperationMode = 'RELOCATE' | 'MANUAL_CORRECTION' | 'INITIAL_STOCK'
 type LocationTypeFilter =
   | 'ALL'
   | LocationType.BIN
@@ -36,20 +38,32 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
-  (e: 'saved', result: AdjustStockResult): void
+  (e: 'saved'): void
 }>()
 
+const authStore = useAuthStore()
 const toast = useToast()
 
 const step = ref<WizardStep>(1)
-const operationType = ref<MovementType.INITIAL_STOCK | MovementType.MANUAL_CORRECTION>(
-  MovementType.INITIAL_STOCK,
-)
-const selectedLocationId = ref('')
+const operationMode = ref<OperationMode>('RELOCATE')
+const initialStockEnabled = ref(false)
+const loadingSettings = ref(false)
+
 const selectedVariant = ref<VariantItem | null>(null)
 const loadingInitialVariant = ref(false)
+
+// Relocate state
+const sourcePositions = ref<StockItemEntry[]>([])
+const loadingSourcePositions = ref(false)
+const fromLocationId = ref('')
+const toLocationId = ref('')
+const relocateQuantity = ref<number | null>(1)
+
+// Adjust state (MANUAL_CORRECTION / INITIAL_STOCK)
+const selectedLocationId = ref('')
 const correctionDirection = ref<1 | -1>(1)
 const quantityInput = ref<number | null>(null)
+
 const note = ref('')
 
 const variantSearchInput = ref('')
@@ -67,12 +81,23 @@ const productCache = ref<Record<string, ProductListItem>>({})
 let variantSearchTimer: ReturnType<typeof setTimeout> | null = null
 let latestVariantSearchSeq = 0
 let latestInitialVariantSeq = 0
+let latestSourcePositionsSeq = 0
 
-const wizardSteps: { step: WizardStep; title: string }[] = [
+const isManager = computed(() => {
+  const role = authStore.user?.role
+  return (
+    role === Role.BOSS ||
+    role === Role.ADMIN ||
+    role === Role.WAREHOUSE_MANAGER ||
+    role === Role.STORE_MANAGER
+  )
+})
+
+const wizardSteps = computed<{ step: WizardStep; title: string }[]>(() => [
   { step: 1, title: 'Termékvariáns' },
-  { step: 2, title: 'Pozíció' },
+  { step: 2, title: operationMode.value === 'RELOCATE' ? 'Forrás & Cél pozíció' : 'Célpozíció' },
   { step: 3, title: 'Mennyiség & Mentés' },
-]
+])
 
 const locationTypeFilterOptions: { value: LocationTypeFilter; label: string }[] = [
   { value: 'ALL', label: 'Összes' },
@@ -106,6 +131,10 @@ const activeLocations = computed<EnrichedLocation[]>(() => {
     .sort((a, b) => a.pathLabel.localeCompare(b.pathLabel, 'hu', { numeric: true }))
 })
 
+const activeLocationById = computed(
+  () => new Map(activeLocations.value.map((item) => [item.location.id, item])),
+)
+
 const filteredLocations = computed<EnrichedLocation[]>(() => {
   const tokens = locationSearchInput.value
     .trim()
@@ -128,46 +157,101 @@ const filteredLocations = computed<EnrichedLocation[]>(() => {
   })
 })
 
-const selectedLocationEntry = computed<EnrichedLocation | null>(() => {
-  if (!selectedLocationId.value) return null
-  return activeLocations.value.find((item) => item.location.id === selectedLocationId.value) ?? null
+const selectedSourcePosition = computed<StockItemEntry | null>(() => {
+  if (!fromLocationId.value) return null
+  return sourcePositions.value.find((p) => p.locationId === fromLocationId.value) ?? null
 })
 
-const isDedicatedLocation = computed(
-  () => selectedLocationEntry.value?.isDedicated ?? false,
-)
+const maxAvailableAtSource = computed<number>(() => {
+  if (!selectedSourcePosition.value) return 0
+  return Math.max(0, selectedSourcePosition.value.quantity - selectedSourcePosition.value.reservedQuantity)
+})
+
+const fromLocationEntry = computed<EnrichedLocation | null>(() => {
+  if (!fromLocationId.value) return null
+  return activeLocationById.value.get(fromLocationId.value) ?? null
+})
+
+const toLocationEntry = computed<EnrichedLocation | null>(() => {
+  if (!toLocationId.value) return null
+  return activeLocationById.value.get(toLocationId.value) ?? null
+})
+
+const selectedLocationEntry = computed<EnrichedLocation | null>(() => {
+  if (!selectedLocationId.value) return null
+  return activeLocationById.value.get(selectedLocationId.value) ?? null
+})
+
+const targetDedicatedWarning = computed(() => {
+  if (operationMode.value === 'RELOCATE') {
+    return toLocationEntry.value?.isDedicated ?? false
+  }
+  return selectedLocationEntry.value?.isDedicated ?? false
+})
 
 const computedQuantityChange = computed<number>(() => {
   if (quantityInput.value === null || Number.isNaN(quantityInput.value)) return 0
   const raw = Math.trunc(quantityInput.value)
   if (raw === 0) return 0
-  if (operationType.value === MovementType.INITIAL_STOCK) {
+  if (operationMode.value === 'INITIAL_STOCK') {
     return Math.abs(raw)
   }
   if (raw < 0) return raw
   return correctionDirection.value * raw
 })
 
+const hasStep2Selection = computed(() => {
+  if (operationMode.value === 'RELOCATE') {
+    return (
+      Boolean(fromLocationId.value) &&
+      Boolean(toLocationId.value) &&
+      fromLocationId.value !== toLocationId.value &&
+      maxAvailableAtSource.value > 0
+    )
+  }
+  return Boolean(selectedLocationId.value)
+})
+
 const canSubmit = computed(() => {
+  if (step.value !== 3 || !selectedVariant.value || submitting.value) return false
+
+  if (operationMode.value === 'RELOCATE') {
+    const qty = relocateQuantity.value !== null ? Math.trunc(relocateQuantity.value) : 0
+    return (
+      hasStep2Selection.value &&
+      Number.isInteger(qty) &&
+      qty >= 1 &&
+      qty <= maxAvailableAtSource.value
+    )
+  }
+
+  if (operationMode.value === 'MANUAL_CORRECTION') {
+    return (
+      isManager.value &&
+      Boolean(selectedLocationId.value) &&
+      computedQuantityChange.value !== 0 &&
+      note.value.trim().length > 0
+    )
+  }
+
+  // INITIAL_STOCK
   return (
-    step.value === 3 &&
+    initialStockEnabled.value &&
     Boolean(selectedLocationId.value) &&
-    Boolean(selectedVariant.value) &&
-    computedQuantityChange.value !== 0 &&
-    !submitting.value
+    computedQuantityChange.value > 0
   )
 })
 
 function isStepCompleted(targetStep: WizardStep): boolean {
   if (targetStep === 1) return Boolean(selectedVariant.value) && step.value !== 1
-  if (targetStep === 2) return Boolean(selectedLocationId.value) && step.value !== 2
+  if (targetStep === 2) return hasStep2Selection.value && step.value !== 2
   return false
 }
 
 function canAccessStep(targetStep: WizardStep): boolean {
   if (targetStep === 1) return true
   if (targetStep === 2) return Boolean(selectedVariant.value)
-  return Boolean(selectedVariant.value) && Boolean(selectedLocationId.value)
+  return Boolean(selectedVariant.value) && hasStep2Selection.value
 }
 
 function goToStep(targetStep: WizardStep) {
@@ -182,6 +266,98 @@ function getPrimaryBarcode(variant: VariantItem): VariantBarcodeItem | undefined
 
 function getProductName(productId: string): string {
   return productCache.value[productId]?.name ?? 'Termék betöltése...'
+}
+
+function formatStockLocationPath(stockItem: StockItemEntry): string {
+  const enriched = activeLocationById.value.get(stockItem.locationId)
+  if (enriched) return enriched.pathLabel
+  const path = getLocationPath(stockItem.locationId, locationById.value)
+  if (path.length > 0) return path.map((p) => p.name).join(' › ')
+  return stockItem.location?.name ?? 'Pozíció'
+}
+
+function selectOperationMode(nextMode: OperationMode) {
+  if (nextMode === 'MANUAL_CORRECTION' && !isManager.value) return
+  if (nextMode === 'INITIAL_STOCK' && !initialStockEnabled.value) return
+
+  operationMode.value = nextMode
+  if (nextMode === 'INITIAL_STOCK') {
+    correctionDirection.value = 1
+    if (quantityInput.value !== null && quantityInput.value < 0) {
+      quantityInput.value = Math.abs(quantityInput.value)
+    }
+  }
+  if (step.value === 3 && !hasStep2Selection.value) {
+    step.value = selectedVariant.value ? 2 : 1
+  }
+}
+
+async function fetchSettings() {
+  loadingSettings.value = true
+  try {
+    const res = await stockApi.getSettings()
+    initialStockEnabled.value = res.data.initialStockEnabled
+  } catch {
+    initialStockEnabled.value = false
+  } finally {
+    loadingSettings.value = false
+  }
+}
+
+async function loadVariantStockPositions(variantId: string) {
+  const seq = ++latestSourcePositionsSeq
+  loadingSourcePositions.value = true
+  try {
+    const res = await stockApi.getAll({ variantId, take: 50 })
+    if (seq !== latestSourcePositionsSeq || !props.visible) return
+
+    const validSources = res.data.items.filter(
+      (item) =>
+        !item.isExternalLocation &&
+        item.location?.isAssigned !== false &&
+        item.quantity - item.reservedQuantity > 0,
+    )
+    sourcePositions.value = validSources
+
+    if (fromLocationId.value) {
+      const stillValid = validSources.some((item) => item.locationId === fromLocationId.value)
+      if (!stillValid) {
+        fromLocationId.value = ''
+      }
+    }
+
+    if (!fromLocationId.value) {
+      if (
+        props.initialLocationId &&
+        validSources.some((item) => item.locationId === props.initialLocationId)
+      ) {
+        fromLocationId.value = props.initialLocationId
+      } else if (validSources.length === 1 && validSources[0]) {
+        fromLocationId.value = validSources[0].locationId
+      }
+    }
+
+    if (toLocationId.value && toLocationId.value === fromLocationId.value) {
+      toLocationId.value = ''
+    }
+
+    if (maxAvailableAtSource.value > 0) {
+      relocateQuantity.value = Math.min(relocateQuantity.value || 1, maxAvailableAtSource.value)
+    }
+  } catch (err) {
+    if (seq !== latestSourcePositionsSeq || !props.visible) return
+    sourcePositions.value = []
+    toast.add({
+      severity: 'error',
+      summary: 'Készlet betöltési hiba',
+      detail: extractApiError(err, 'Nem sikerült betölteni a variáns aktuális polchelyeit.'),
+      life: 4000,
+    })
+  } finally {
+    if (seq === latestSourcePositionsSeq) {
+      loadingSourcePositions.value = false
+    }
+  }
 }
 
 async function hydrateProductNames(variants: VariantItem[]) {
@@ -222,7 +398,7 @@ async function searchVariants(searchText: string, autoSelectExact = false) {
         (res.data.length === 1 ? res.data[0] : undefined)
 
       if (exactMatch) {
-        selectedVariant.value = exactMatch
+        chooseVariant(exactMatch)
       }
     }
   } catch (err) {
@@ -247,7 +423,8 @@ async function loadInitialVariant(variantId: string) {
     const res = await variantApi.getOne(variantId)
     if (seq !== latestInitialVariantSeq || !props.visible) return
     selectedVariant.value = res.data
-    await hydrateProductNames([res.data])
+    void hydrateProductNames([res.data])
+    void loadVariantStockPositions(res.data.id)
   } catch (err) {
     if (seq !== latestInitialVariantSeq || !props.visible) return
     toast.add({
@@ -271,26 +448,77 @@ function triggerImmediateVariantSearch() {
   void searchVariants(variantSearchInput.value, true)
 }
 
+function chooseVariant(variant: VariantItem) {
+  if (selectedVariant.value?.id !== variant.id) {
+    fromLocationId.value = ''
+    toLocationId.value = ''
+    relocateQuantity.value = 1
+    selectedVariant.value = variant
+    void loadVariantStockPositions(variant.id)
+  }
+}
+
 function selectVariantAndAdvance(variant: VariantItem) {
-  selectedVariant.value = variant
+  chooseVariant(variant)
   step.value = 2
 }
 
+function selectTargetLocation(locationId: string) {
+  if (operationMode.value === 'RELOCATE') {
+    if (locationId === fromLocationId.value) return
+    toLocationId.value = locationId
+  } else {
+    selectedLocationId.value = locationId
+  }
+}
+
 function selectLocationAndAdvance(locationId: string) {
-  selectedLocationId.value = locationId
-  if (selectedVariant.value) {
-    step.value = 3
+  if (operationMode.value === 'RELOCATE') {
+    if (locationId === fromLocationId.value) return
+    toLocationId.value = locationId
+    if (selectedVariant.value && fromLocationId.value && maxAvailableAtSource.value > 0) {
+      step.value = 3
+    }
+  } else {
+    selectedLocationId.value = locationId
+    if (selectedVariant.value) {
+      step.value = 3
+    }
+  }
+}
+
+function selectSourceLocation(locationId: string) {
+  fromLocationId.value = locationId
+  if (toLocationId.value === locationId) {
+    toLocationId.value = ''
+  }
+  const available = maxAvailableAtSource.value
+  if (available > 0) {
+    relocateQuantity.value = Math.min(Math.max(1, relocateQuantity.value ?? 1), available)
   }
 }
 
 function handleLocationSearchEnter() {
-  const firstMatch = filteredLocations.value[0]
+  const firstMatch = filteredLocations.value.find(
+    (item) => operationMode.value !== 'RELOCATE' || item.location.id !== fromLocationId.value,
+  )
   if (filteredLocations.value.length === 1 && firstMatch) {
-    selectedLocationId.value = firstMatch.location.id
+    selectTargetLocation(firstMatch.location.id)
   }
 }
 
 function addQuickQuantity(delta: number) {
+  if (operationMode.value === 'RELOCATE') {
+    const current =
+      relocateQuantity.value !== null && !Number.isNaN(relocateQuantity.value)
+        ? Math.max(0, Math.trunc(relocateQuantity.value))
+        : 0
+    const nextVal = current + delta
+    relocateQuantity.value =
+      maxAvailableAtSource.value > 0 ? Math.min(nextVal, maxAvailableAtSource.value) : nextVal
+    return
+  }
+
   const current =
     quantityInput.value !== null && !Number.isNaN(quantityInput.value)
       ? Math.max(0, Math.trunc(quantityInput.value))
@@ -304,15 +532,6 @@ watch(variantSearchInput, (val) => {
   variantSearchTimer = setTimeout(() => {
     void searchVariants(val, false)
   }, 300)
-})
-
-watch(operationType, (nextType) => {
-  if (nextType === MovementType.INITIAL_STOCK) {
-    correctionDirection.value = 1
-    if (quantityInput.value !== null && quantityInput.value < 0) {
-      quantityInput.value = Math.abs(quantityInput.value)
-    }
-  }
 })
 
 watch(step, (nextStep) => {
@@ -334,14 +553,21 @@ watch(
       return
     }
 
+    operationMode.value = 'RELOCATE'
     correctionDirection.value = 1
     quantityInput.value = null
+    relocateQuantity.value = 1
     note.value = ''
     variantSearchInput.value = ''
     locationSearchInput.value = ''
     locationTypeFilter.value = 'ALL'
     selectedVariant.value = null
     loadingInitialVariant.value = false
+    sourcePositions.value = []
+    fromLocationId.value = ''
+    toLocationId.value = ''
+
+    void fetchSettings()
 
     const hasValidInitialLocation = Boolean(
       props.initialLocationId &&
@@ -351,23 +577,16 @@ watch(
     )
     selectedLocationId.value =
       hasValidInitialLocation && props.initialLocationId ? props.initialLocationId : ''
+    fromLocationId.value =
+      hasValidInitialLocation && props.initialLocationId ? props.initialLocationId : ''
 
-    const hasInitialVariant = Boolean(props.initialVariantId)
-
-    if (hasInitialVariant && hasValidInitialLocation) {
-      operationType.value = MovementType.MANUAL_CORRECTION
-      step.value = 3
-    } else if (hasInitialVariant) {
-      operationType.value = MovementType.INITIAL_STOCK
+    if (props.initialVariantId) {
       step.value = 2
+      void loadInitialVariant(props.initialVariantId)
     } else {
-      operationType.value = MovementType.INITIAL_STOCK
       step.value = 1
     }
 
-    if (props.initialVariantId) {
-      void loadInitialVariant(props.initialVariantId)
-    }
     void searchVariants('', false)
 
     void nextTick(() => {
@@ -399,6 +618,77 @@ async function handleSubmit() {
     return
   }
 
+  if (operationMode.value === 'RELOCATE') {
+    if (!fromLocationId.value || !toLocationId.value || fromLocationId.value === toLocationId.value) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Hiányzó pozíció',
+        detail: 'Válassz ki eltérő forrás és cél pozíciót.',
+        life: 4000,
+      })
+      step.value = 2
+      return
+    }
+    const qty = relocateQuantity.value !== null ? Math.trunc(relocateQuantity.value) : 0
+    if (!Number.isInteger(qty) || qty < 1 || qty > maxAvailableAtSource.value) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Érvénytelen mennyiség',
+        detail: `Az áthelyezhető mennyiség 1 és ${maxAvailableAtSource.value} db között lehet.`,
+        life: 4000,
+      })
+      return
+    }
+
+    submitting.value = true
+    try {
+      await stockApi.relocate({
+        variantId: selectedVariant.value.id,
+        fromLocationId: fromLocationId.value,
+        toLocationId: toLocationId.value,
+        quantity: qty,
+        note: note.value.trim() || undefined,
+      })
+      toast.add({
+        severity: 'success',
+        summary: 'Készlet áthelyezve',
+        detail: `${selectedVariant.value.sku} (${qty} db) sikeresen áthelyezve.`,
+        life: 4000,
+      })
+      emit('saved')
+      closeModal()
+    } catch (err) {
+      toast.add({
+        severity: 'error',
+        summary: 'Áthelyezési hiba',
+        detail: extractApiError(err, 'Nem sikerült áthelyezni a készletet.'),
+        life: 6000,
+      })
+    } finally {
+      submitting.value = false
+    }
+    return
+  }
+
+  // MANUAL_CORRECTION or INITIAL_STOCK
+  if (operationMode.value === 'MANUAL_CORRECTION' && !isManager.value) {
+    toast.add({
+      severity: 'error',
+      summary: 'Jogosultság hiányzik',
+      detail: 'Kézi korrekciót csak vezető végezhet.',
+      life: 4000,
+    })
+    return
+  }
+  if (operationMode.value === 'INITIAL_STOCK' && !initialStockEnabled.value) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Nyitókészlet kikapcsolva',
+      detail: 'A nyitókészlet felvitele jelenleg ki van kapcsolva.',
+      life: 4000,
+    })
+    return
+  }
   if (!selectedLocationId.value) {
     toast.add({
       severity: 'warn',
@@ -421,11 +711,22 @@ async function handleSubmit() {
     return
   }
 
-  if (operationType.value === MovementType.INITIAL_STOCK && quantityChange < 0) {
+  if (operationMode.value === 'INITIAL_STOCK' && quantityChange < 0) {
     toast.add({
       severity: 'warn',
       summary: 'Érvénytelen mennyiség',
-      detail: 'Kezdeti készletfelvitelnél csak pozitív mennyiség adható meg.',
+      detail: 'Nyitókészlet felvitelnél csak pozitív mennyiség adható meg.',
+      life: 4000,
+    })
+    return
+  }
+
+  const trimmedNote = note.value.trim()
+  if (operationMode.value === 'MANUAL_CORRECTION' && !trimmedNote) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Kötelező indoklás',
+      detail: 'Kézi korrekciónál az indoklás (megjegyzés) megadása kötelező.',
       life: 4000,
     })
     return
@@ -433,12 +734,15 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    const res = await stockApi.adjust({
+    await stockApi.adjust({
       variantId: selectedVariant.value.id,
       locationId: selectedLocationId.value,
       quantityChange,
-      type: operationType.value,
-      note: note.value.trim() || undefined,
+      type:
+        operationMode.value === 'INITIAL_STOCK'
+          ? MovementType.INITIAL_STOCK
+          : MovementType.MANUAL_CORRECTION,
+      note: trimmedNote || undefined,
     })
 
     const signedStr = quantityChange > 0 ? `+${quantityChange}` : `${quantityChange}`
@@ -448,7 +752,7 @@ async function handleSubmit() {
       detail: `${selectedVariant.value.sku} (${signedStr} db) sikeresen elmentve.`,
       life: 4000,
     })
-    emit('saved', res.data)
+    emit('saved')
     closeModal()
   } catch (err) {
     toast.add({
@@ -472,10 +776,111 @@ onBeforeUnmount(() => {
     :visible="visible"
     @update:visible="(v) => emit('update:visible', v)"
     modal
-    header="Készlet felvitele / korrekció"
-    :style="{ width: '42rem', maxWidth: '96vw' }"
+    header="Készlet áthelyezése / módosítása"
+    :style="{ width: '44rem', maxWidth: '96vw' }"
   >
     <form class="space-y-4 pt-1" @submit.prevent="handleSubmit">
+      <!-- Műveleti mód választó -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold uppercase tracking-wide text-[#686f6a]">
+            Művelet típusa
+          </span>
+          <span v-if="loadingSettings" class="text-[11px] text-[#686f6a]">
+            Beállítások betöltése...
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <!-- 1. RELOCATE (Default) -->
+          <button
+            type="button"
+            @click="selectOperationMode('RELOCATE')"
+            class="rounded-[11px] border px-3 py-2 text-left transition cursor-pointer"
+            :class="
+              operationMode === 'RELOCATE'
+                ? 'bg-[#171918] border-[#171918] text-white shadow-xs'
+                : 'bg-[#f8f9f7] border-[#e2e5df] text-[#171918] hover:bg-white'
+            "
+          >
+            <div class="flex items-center gap-1.5 text-xs font-semibold">
+              <i class="pi pi-arrow-right-arrow-left text-[11px]"></i>
+              <span>Áthelyezés</span>
+            </div>
+            <p
+              class="text-[10px] mt-0.5 leading-snug"
+              :class="operationMode === 'RELOCATE' ? 'text-white/75' : 'text-[#686f6a]'"
+            >
+              Pozíciók közti áttárolás
+            </p>
+          </button>
+
+          <!-- 2. MANUAL_CORRECTION (Managers only) -->
+          <button
+            v-if="isManager"
+            type="button"
+            @click="selectOperationMode('MANUAL_CORRECTION')"
+            class="rounded-[11px] border px-3 py-2 text-left transition cursor-pointer"
+            :class="
+              operationMode === 'MANUAL_CORRECTION'
+                ? 'bg-[#171918] border-[#171918] text-white shadow-xs'
+                : 'bg-[#f8f9f7] border-[#e2e5df] text-[#171918] hover:bg-white'
+            "
+          >
+            <div class="flex items-center gap-1.5 text-xs font-semibold">
+              <i class="pi pi-sliders-h text-[11px]"></i>
+              <span>Kézi korrekció</span>
+            </div>
+            <p
+              class="text-[10px] mt-0.5 leading-snug"
+              :class="operationMode === 'MANUAL_CORRECTION' ? 'text-white/75' : 'text-[#686f6a]'"
+            >
+              Vezetői + / - javítás indoklással
+            </p>
+          </button>
+
+          <!-- 3. INITIAL_STOCK (Controlled by BOSS setting) -->
+          <button
+            type="button"
+            :disabled="!initialStockEnabled"
+            @click="selectOperationMode('INITIAL_STOCK')"
+            class="rounded-[11px] border px-3 py-2 text-left transition"
+            :class="[
+              !initialStockEnabled
+                ? 'bg-[#f4f5f2] border-[#e5e8e1] text-[#9aa197] cursor-not-allowed opacity-75'
+                : operationMode === 'INITIAL_STOCK'
+                  ? 'bg-[#171918] border-[#171918] text-white shadow-xs cursor-pointer'
+                  : 'bg-[#f8f9f7] border-[#e2e5df] text-[#171918] hover:bg-white cursor-pointer',
+            ]"
+          >
+            <div class="flex items-center gap-1.5 text-xs font-semibold">
+              <i class="pi pi-plus-circle text-[11px]"></i>
+              <span>Nyitókészlet felvitel</span>
+            </div>
+            <p
+              class="text-[10px] mt-0.5 leading-snug"
+              :class="
+                !initialStockEnabled
+                  ? 'text-[#9aa197]'
+                  : operationMode === 'INITIAL_STOCK'
+                    ? 'text-white/75'
+                    : 'text-[#686f6a]'
+              "
+            >
+              {{ initialStockEnabled ? 'Új nyitókészlet rögzítése' : 'Jelenleg kikapcsolva' }}
+            </p>
+          </button>
+        </div>
+
+        <p
+          v-if="!loadingSettings && !initialStockEnabled"
+          class="text-[11px] text-[#686f6a] bg-[#f8f9f7] border border-[#e5e8e1] rounded-[9px] px-3 py-1.5 flex items-center gap-2"
+        >
+          <i class="pi pi-info-circle text-[#f46714] text-xs shrink-0"></i>
+          <span>Nyitókészlet felvitel kikapcsolva (a BOSS engedélyezheti a Vezérlőpulton)</span>
+        </p>
+      </div>
+
       <!-- Felső 3 lépéses Stepper -->
       <nav
         aria-label="Készletművelet lépései"
@@ -570,7 +975,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="max-h-[260px] overflow-y-auto rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] divide-y divide-[#eceee9]">
+        <div class="max-h-[240px] overflow-y-auto rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] divide-y divide-[#eceee9]">
           <div
             v-if="!loadingVariants && variantResults.length === 0"
             class="py-8 text-center text-xs text-[#686f6a]"
@@ -583,7 +988,7 @@ onBeforeUnmount(() => {
             :key="variant.id"
             role="button"
             tabindex="0"
-            @click="selectedVariant = variant"
+            @click="chooseVariant(variant)"
             @dblclick="selectVariantAndAdvance(variant)"
             @keydown.enter.prevent="selectVariantAndAdvance(variant)"
             class="px-3.5 py-2.5 transition flex items-center justify-between gap-3 cursor-pointer outline-none"
@@ -657,7 +1062,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- 2. LÉPÉS: Pozíció (Lokáció) kiválasztása -->
+      <!-- 2. LÉPÉS: Pozíció(k) kiválasztása -->
       <div v-else-if="step === 2" class="space-y-3">
         <!-- Kiválasztott variáns pill -->
         <div
@@ -690,8 +1095,76 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <!-- Kereső és típus szűrő pillek -->
+        <!-- RELOCATE: Forrás pozíció (ahol van szabad készlet) -->
+        <div v-if="operationMode === 'RELOCATE'" class="space-y-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <label class="block text-xs font-semibold text-[#171918]">
+              1. Forrás pozíció (ahonnan áthelyezzük)
+            </label>
+            <span v-if="loadingSourcePositions" class="text-[11px] text-[#686f6a] flex items-center gap-1">
+              <i class="pi pi-spin pi-spinner text-[11px]"></i> Készlethelyek betöltése...
+            </span>
+          </div>
+
+          <div
+            v-if="!loadingSourcePositions && sourcePositions.length === 0"
+            class="rounded-[11px] border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs text-amber-900 space-y-1.5"
+          >
+            <p class="font-semibold">
+              Ebből a variánsból jelenleg nincs szabad áthelyezhető készlet saját pozíción.
+            </p>
+            <p class="text-[11px] text-amber-800">
+              Válassz másik variánst, vagy (ha jogosultságod van) használj kézi korrekciót / nyitókészlet felvitelt.
+            </p>
+          </div>
+
+          <div
+            v-else
+            class="max-h-[140px] overflow-y-auto rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] divide-y divide-[#eceee9]"
+          >
+            <button
+              v-for="src in sourcePositions"
+              :key="src.id"
+              type="button"
+              @click="selectSourceLocation(src.locationId)"
+              class="w-full px-3.5 py-2 text-left transition flex items-center justify-between gap-3 cursor-pointer"
+              :class="
+                fromLocationId === src.locationId
+                  ? 'bg-orange-50/90 ring-1 ring-inset ring-[#f46714]/40'
+                  : 'hover:bg-white'
+              "
+            >
+              <div class="min-w-0 flex-1">
+                <p class="text-xs font-semibold text-[#171918] truncate">
+                  {{ formatStockLocationPath(src) }}
+                </p>
+                <p class="text-[11px] text-[#686f6a]">
+                  Összes: {{ src.quantity }} db · Foglalt: {{ src.reservedQuantity }} db
+                </p>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                  Szabad: {{ src.quantity - src.reservedQuantity }} db
+                </span>
+                <i
+                  v-if="fromLocationId === src.locationId"
+                  class="pi pi-check-circle text-[#f46714] text-sm"
+                ></i>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Cél pozíció választó -->
         <div class="space-y-2">
+          <label class="block text-xs font-semibold text-[#171918]">
+            {{
+              operationMode === 'RELOCATE'
+                ? '2. Cél pozíció (ahová áthelyezzük)'
+                : 'Célpozíció kiválasztása'
+            }}
+          </label>
+
           <div class="relative">
             <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-[#686f6a] text-xs"></i>
             <input
@@ -732,10 +1205,10 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Aktív pozíciók listája -->
-        <div class="max-h-[240px] overflow-y-auto rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] divide-y divide-[#eceee9]">
+        <div class="max-h-[190px] overflow-y-auto rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] divide-y divide-[#eceee9]">
           <div
             v-if="filteredLocations.length === 0"
-            class="py-8 text-center text-xs text-[#686f6a]"
+            class="py-6 text-center text-xs text-[#686f6a]"
           >
             Nincs a szűrésnek megfelelő aktív pozíció.
           </div>
@@ -744,18 +1217,20 @@ onBeforeUnmount(() => {
             v-for="item in filteredLocations"
             :key="item.location.id"
             role="button"
-            tabindex="0"
-            @click="selectedLocationId = item.location.id"
+            :tabindex="operationMode === 'RELOCATE' && item.location.id === fromLocationId ? -1 : 0"
+            @click="selectTargetLocation(item.location.id)"
             @dblclick="selectLocationAndAdvance(item.location.id)"
             @keydown.enter.prevent="selectLocationAndAdvance(item.location.id)"
-            class="px-3.5 py-2.5 transition flex items-center justify-between gap-3 cursor-pointer outline-none"
-            :class="
-              selectedLocationId === item.location.id
-                ? 'bg-orange-50/90 ring-1 ring-inset ring-[#f46714]/40'
-                : 'hover:bg-white'
-            "
+            class="px-3.5 py-2 transition flex items-center justify-between gap-3 outline-none"
+            :class="[
+              operationMode === 'RELOCATE' && item.location.id === fromLocationId
+                ? 'opacity-50 bg-slate-50 cursor-not-allowed'
+                : (operationMode === 'RELOCATE' ? toLocationId : selectedLocationId) === item.location.id
+                  ? 'bg-orange-50/90 ring-1 ring-inset ring-[#f46714]/40 cursor-pointer'
+                  : 'hover:bg-white cursor-pointer',
+            ]"
           >
-            <div class="min-w-0 flex-1 space-y-1">
+            <div class="min-w-0 flex-1 space-y-0.5">
               <div class="flex items-center gap-2">
                 <i :class="[item.icon, 'text-xs text-[#686f6a] shrink-0']"></i>
                 <span class="text-xs font-semibold text-[#171918] truncate">
@@ -778,20 +1253,27 @@ onBeforeUnmount(() => {
                   <i class="pi pi-exclamation-triangle text-[9px] text-amber-600"></i>
                   DEDICATED
                 </span>
+                <span
+                  v-if="operationMode === 'RELOCATE' && item.location.id === fromLocationId"
+                  class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700"
+                >
+                  Aktuális forrás
+                </span>
               </div>
             </div>
 
             <div class="flex items-center gap-2 shrink-0">
               <i
-                v-if="selectedLocationId === item.location.id"
+                v-if="(operationMode === 'RELOCATE' ? toLocationId : selectedLocationId) === item.location.id"
                 class="pi pi-check-circle text-[#f46714] text-sm"
               ></i>
               <button
+                v-if="!(operationMode === 'RELOCATE' && item.location.id === fromLocationId)"
                 type="button"
                 @click.stop="selectLocationAndAdvance(item.location.id)"
                 class="h-[28px] px-2.5 rounded-[8px] border text-[11px] font-semibold transition cursor-pointer"
                 :class="
-                  selectedLocationId === item.location.id
+                  (operationMode === 'RELOCATE' ? toLocationId : selectedLocationId) === item.location.id
                     ? 'bg-[#171918] border-[#171918] text-white'
                     : 'bg-white border-[#dce0d8] text-[#171918] hover:border-[#171918]'
                 "
@@ -813,7 +1295,7 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            :disabled="!selectedLocationId"
+            :disabled="!hasStep2Selection"
             @click="goToStep(3)"
             class="h-[38px] px-4 rounded-[10px] bg-[#171918] hover:bg-[#2a2d2b] disabled:opacity-45 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition"
           >
@@ -823,15 +1305,18 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- 3. LÉPÉS: Művelet, mennyiség és rögzítés -->
+      <!-- 3. LÉPÉS: Mennyiség és rögzítés -->
       <div v-else class="space-y-4">
         <!-- Összefoglaló kártyák -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div
+          class="grid grid-cols-1 gap-2.5"
+          :class="operationMode === 'RELOCATE' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'"
+        >
           <!-- Kiválasztott variáns -->
-          <div class="rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] px-3.5 py-2.5 flex flex-col justify-between gap-1.5">
+          <div class="rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] px-3 py-2.5 flex flex-col justify-between gap-1.5">
             <div class="flex items-center justify-between gap-2">
               <span class="text-[10px] font-bold uppercase tracking-wide text-[#686f6a]">
-                Kiválasztott variáns
+                Variáns
               </span>
               <button
                 type="button"
@@ -844,7 +1329,7 @@ onBeforeUnmount(() => {
 
             <div v-if="loadingInitialVariant && !selectedVariant" class="flex items-center gap-2 text-xs text-[#686f6a] py-1">
               <i class="pi pi-spin pi-spinner text-xs"></i>
-              <span>Variáns betöltése...</span>
+              <span>Betöltés...</span>
             </div>
             <div v-else-if="selectedVariant" class="min-w-0">
               <p class="text-xs font-semibold text-[#171918] truncate">
@@ -854,15 +1339,39 @@ onBeforeUnmount(() => {
                 <span class="font-mono font-semibold text-[#171918]">{{ selectedVariant.sku }}</span>
                 <span> · </span>
                 <strong>{{ selectedVariant.size }}</strong>
-                <span v-if="selectedVariant.colors.length > 0">
-                  · {{ selectedVariant.colors.join(', ') }}
-                </span>
               </p>
             </div>
           </div>
 
+          <!-- RELOCATE Forrás -->
+          <div
+            v-if="operationMode === 'RELOCATE'"
+            class="rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] px-3 py-2.5 flex flex-col justify-between gap-1.5"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] font-bold uppercase tracking-wide text-[#686f6a]">
+                Forrás pozíció
+              </span>
+              <button
+                type="button"
+                @click="step = 2"
+                class="text-[11px] font-semibold text-[#f46714] hover:underline cursor-pointer"
+              >
+                Csere
+              </button>
+            </div>
+            <div v-if="fromLocationEntry" class="min-w-0 space-y-1">
+              <p class="text-xs font-semibold text-[#171918] truncate">
+                {{ fromLocationEntry.pathLabel }}
+              </p>
+              <span class="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Szabad: {{ maxAvailableAtSource }} db
+              </span>
+            </div>
+          </div>
+
           <!-- Célpozíció -->
-          <div class="rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] px-3.5 py-2.5 flex flex-col justify-between gap-1.5">
+          <div class="rounded-[11px] border border-[#e5e8e1] bg-[#f8f9f7] px-3 py-2.5 flex flex-col justify-between gap-1.5">
             <div class="flex items-center justify-between gap-2">
               <span class="text-[10px] font-bold uppercase tracking-wide text-[#686f6a]">
                 Célpozíció
@@ -876,24 +1385,26 @@ onBeforeUnmount(() => {
               </button>
             </div>
 
-            <div v-if="selectedLocationEntry" class="min-w-0 space-y-1">
+            <div
+              v-if="operationMode === 'RELOCATE' ? toLocationEntry : selectedLocationEntry"
+              class="min-w-0 space-y-1"
+            >
               <p class="text-xs font-semibold text-[#171918] truncate">
-                {{ selectedLocationEntry.pathLabel }}
+                {{ (operationMode === 'RELOCATE' ? toLocationEntry : selectedLocationEntry)?.pathLabel }}
               </p>
               <div class="flex flex-wrap items-center gap-1.5">
                 <span
                   :class="[
                     'text-[10px] font-semibold px-1.5 py-0.5 rounded',
-                    selectedLocationEntry.badgeClass,
+                    (operationMode === 'RELOCATE' ? toLocationEntry : selectedLocationEntry)?.badgeClass,
                   ]"
                 >
-                  {{ selectedLocationEntry.typeLabel }}
+                  {{ (operationMode === 'RELOCATE' ? toLocationEntry : selectedLocationEntry)?.typeLabel }}
                 </span>
                 <span
-                  v-if="isDedicatedLocation"
+                  v-if="targetDedicatedWarning"
                   class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200"
                 >
-                  <i class="pi pi-exclamation-triangle text-[9px] text-amber-600"></i>
                   DEDICATED
                 </span>
               </div>
@@ -902,69 +1413,63 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-          v-if="isDedicatedLocation"
+          v-if="targetDedicatedWarning"
           class="flex items-center gap-2 rounded-[10px] bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] font-medium text-amber-800"
         >
           <i class="pi pi-exclamation-triangle text-amber-600 text-xs shrink-0"></i>
-          <span>Dedikált tárhely: csak 1 variáns tárolható rajta</span>
+          <span>Dedikált cél tárhely: csak 1 variáns tárolható rajta</span>
         </div>
 
-        <!-- Művelet típusa -->
-        <div class="space-y-1.5">
-          <label class="block text-xs font-semibold text-[#171918]">Művelet típusa</label>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <button
-              type="button"
-              @click="operationType = MovementType.INITIAL_STOCK"
-              class="rounded-[11px] border px-3 py-2.5 text-left transition cursor-pointer"
-              :class="
-                operationType === MovementType.INITIAL_STOCK
-                  ? 'bg-[#171918] border-[#171918] text-white shadow-xs'
-                  : 'bg-[#f8f9f7] border-[#e2e5df] text-[#171918] hover:bg-white'
-              "
-            >
-              <div class="flex items-center gap-2 text-xs font-semibold">
-                <i class="pi pi-plus-circle text-xs"></i>
-                <span>Kezdeti készletfelvitel</span>
-              </div>
-              <p
-                class="text-[11px] mt-0.5"
-                :class="operationType === MovementType.INITIAL_STOCK ? 'text-white/75' : 'text-[#686f6a]'"
-              >
-                Nyitó vagy új készlet rögzítése pozitív darabszámmal.
-              </p>
-            </button>
+        <!-- Mennyiség (RELOCATE) -->
+        <div v-if="operationMode === 'RELOCATE'" class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-[#171918]">
+              Áthelyezendő mennyiség (db)
+            </label>
+            <span class="text-xs font-semibold text-[#4c534e]">
+              Maximum: <strong class="text-[#171918]">{{ maxAvailableAtSource }} db</strong>
+            </span>
+          </div>
 
-            <button
-              type="button"
-              @click="operationType = MovementType.MANUAL_CORRECTION"
-              class="rounded-[11px] border px-3 py-2.5 text-left transition cursor-pointer"
-              :class="
-                operationType === MovementType.MANUAL_CORRECTION
-                  ? 'bg-[#171918] border-[#171918] text-white shadow-xs'
-                  : 'bg-[#f8f9f7] border-[#e2e5df] text-[#171918] hover:bg-white'
-              "
-            >
-              <div class="flex items-center gap-2 text-xs font-semibold">
-                <i class="pi pi-sliders-h text-xs"></i>
-                <span>Kézi korrekció</span>
-              </div>
-              <p
-                class="text-[11px] mt-0.5"
-                :class="operationType === MovementType.MANUAL_CORRECTION ? 'text-white/75' : 'text-[#686f6a]'"
+          <div class="flex flex-wrap items-center gap-2">
+            <input
+              v-model.number="relocateQuantity"
+              type="number"
+              min="1"
+              :max="maxAvailableAtSource"
+              step="1"
+              placeholder="1"
+              class="w-32 h-[40px] rounded-[10px] border border-[#dce0d8] bg-white px-3 text-sm font-semibold text-[#171918] outline-none focus:border-[#f46714]"
+            />
+
+            <div class="flex items-center gap-1.5">
+              <button
+                v-for="quickStep in [1, 5, 10]"
+                :key="quickStep"
+                type="button"
+                @click="addQuickQuantity(quickStep)"
+                class="h-[40px] px-3 rounded-[10px] bg-[#eff1ed] hover:bg-[#171918] text-[#171918] hover:text-white text-xs font-semibold transition cursor-pointer"
               >
-                Mennyiség növelése vagy csökkentése (pl. sérülés, eltérés).
-              </p>
-            </button>
+                +{{ quickStep }}
+              </button>
+              <button
+                v-if="maxAvailableAtSource > 0"
+                type="button"
+                @click="relocateQuantity = maxAvailableAtSource"
+                class="h-[40px] px-3 rounded-[10px] bg-emerald-50 hover:bg-emerald-600 text-emerald-800 hover:text-white border border-emerald-200 text-xs font-semibold transition cursor-pointer"
+              >
+                Mind ({{ maxAvailableAtSource }} db)
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Mennyiség -->
-        <div class="space-y-1.5">
+        <!-- Mennyiség (MANUAL_CORRECTION / INITIAL_STOCK) -->
+        <div v-else class="space-y-1.5">
           <div class="flex items-center justify-between">
             <label class="block text-xs font-semibold text-[#171918]">
               {{
-                operationType === MovementType.INITIAL_STOCK
+                operationMode === 'INITIAL_STOCK'
                   ? 'Felvitt mennyiség (db)'
                   : 'Korrekciós mennyiség (db)'
               }}
@@ -980,7 +1485,7 @@ onBeforeUnmount(() => {
 
           <div class="flex flex-wrap items-center gap-2">
             <div
-              v-if="operationType === MovementType.MANUAL_CORRECTION"
+              v-if="operationMode === 'MANUAL_CORRECTION'"
               class="inline-flex rounded-[10px] border border-[#dce0d8] bg-[#f8f9f7] p-0.5"
             >
               <button
@@ -1012,7 +1517,7 @@ onBeforeUnmount(() => {
             <input
               v-model.number="quantityInput"
               type="number"
-              :min="operationType === MovementType.INITIAL_STOCK ? 1 : undefined"
+              :min="operationMode === 'INITIAL_STOCK' ? 1 : undefined"
               step="1"
               placeholder="Pl. 5"
               class="w-32 h-[40px] rounded-[10px] border border-[#dce0d8] bg-white px-3 text-sm font-semibold text-[#171918] outline-none focus:border-[#f46714]"
@@ -1032,14 +1537,32 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- Megjegyzés -->
+        <!-- Megjegyzés / Indoklás -->
         <div class="space-y-1.5">
-          <label class="block text-xs font-semibold text-[#171918]">Megjegyzés (opcionális)</label>
+          <label class="block text-xs font-semibold text-[#171918]">
+            {{
+              operationMode === 'MANUAL_CORRECTION'
+                ? 'Indoklás (kötelező) *'
+                : 'Megjegyzés (opcionális)'
+            }}
+          </label>
           <input
             v-model="note"
             type="text"
-            placeholder="Pl. Nyitó készlet betöltése vagy sérült csomagolás leírása..."
-            class="w-full h-[40px] rounded-[10px] border border-[#dce0d8] bg-white px-3 text-xs text-[#171918] placeholder-[#686f6a] outline-none focus:border-[#f46714]"
+            maxlength="500"
+            :placeholder="
+              operationMode === 'RELOCATE'
+                ? 'Pl. Átcsoportosítás az eladótérbe vagy másik polcra...'
+                : operationMode === 'MANUAL_CORRECTION'
+                  ? 'Pl. Sérült csomagolás leírása, fizikai számolás korrekciója...'
+                  : 'Pl. Nyitó készlet betöltése...'
+            "
+            class="w-full h-[40px] rounded-[10px] border bg-white px-3 text-xs text-[#171918] placeholder-[#686f6a] outline-none focus:border-[#f46714]"
+            :class="
+              operationMode === 'MANUAL_CORRECTION' && note.trim().length === 0
+                ? 'border-amber-300'
+                : 'border-[#dce0d8]'
+            "
           />
         </div>
 
@@ -1060,7 +1583,15 @@ onBeforeUnmount(() => {
             class="h-[38px] px-5 rounded-[10px] bg-[#171918] hover:bg-[#2a2d2b] disabled:opacity-45 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition"
           >
             <i v-if="submitting" class="pi pi-spin pi-spinner text-xs"></i>
-            <span>Készletmozgás rögzítése</span>
+            <span>
+              {{
+                operationMode === 'RELOCATE'
+                  ? 'Áthelyezés végrehajtása'
+                  : operationMode === 'MANUAL_CORRECTION'
+                    ? 'Kézi korrekció rögzítése'
+                    : 'Nyitókészlet rögzítése'
+              }}
+            </span>
           </button>
         </div>
       </div>

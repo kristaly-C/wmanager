@@ -80,6 +80,52 @@ export interface AdjustStockResult {
   movement: StockMovementEntry
 }
 
+export type StockReportStatusType = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+export interface StockSettingsResponse {
+  initialStockEnabled: boolean
+}
+
+export interface RelocateStockPayload {
+  variantId: string
+  fromLocationId: string
+  toLocationId: string
+  quantity: number
+  note?: string
+}
+
+export interface StockReportEntry {
+  id: string
+  variantId: string
+  locationId: string
+  expectedQuantity: number
+  foundQuantity: number
+  reason: string
+  status: StockReportStatusType
+  reportedByUserId: string
+  resolvedByUserId?: string | null
+  resolutionNote?: string | null
+  resolvedAt?: string | null
+  createdAt: string
+  updatedAt: string
+  location: LocationItem
+  variant: StockVariantInfo
+  reportedByUser?: { id: string; name: string; email: string; role: string }
+  resolvedByUser?: { id: string; name: string; email: string; role: string } | null
+}
+
+export interface CreateStockReportPayload {
+  variantId: string
+  locationId: string
+  foundQuantity: number
+  reason: string
+}
+
+export interface ResolveStockReportPayload {
+  action: 'APPROVE' | 'REJECT'
+  resolutionNote?: string
+}
+
 export const stockApi = {
   getAll: (
     params?: {
@@ -106,4 +152,16 @@ export const stockApi = {
   ) => apiClient.get<StockMovementListResponse>('/stock/movements', { params, signal }),
   adjust: (data: AdjustStockPayload) =>
     apiClient.post<AdjustStockResult>('/stock/adjust', data),
+  relocate: (data: RelocateStockPayload) =>
+    apiClient.post('/stock/relocate', data),
+  getSettings: () =>
+    apiClient.get<StockSettingsResponse>('/stock/settings'),
+  updateSettings: (data: { initialStockEnabled: boolean }) =>
+    apiClient.patch<StockSettingsResponse>('/stock/settings', data),
+  getReports: (params?: { status?: StockReportStatusType; locationId?: string }) =>
+    apiClient.get<StockReportEntry[]>('/stock/reports', { params }),
+  createReport: (data: CreateStockReportPayload) =>
+    apiClient.post<StockReportEntry>('/stock/reports', data),
+  resolveReport: (id: string, data: ResolveStockReportPayload) =>
+    apiClient.post<StockReportEntry>(`/stock/reports/${id}/resolve`, data),
 }

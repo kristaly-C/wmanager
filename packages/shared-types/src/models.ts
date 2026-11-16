@@ -1,4 +1,4 @@
-import { LocationType, MovementType, SlotMode, Role, PurchaseOrderStatus, StockTransferStatus, StocktakeStatus, ReturnCaseStatus, SalesOrderStatus } from "./enums";
+import { LocationType, MovementType, SlotMode, Role, PurchaseOrderStatus, StockTransferStatus, StocktakeStatus, ReturnCaseStatus, SalesOrderStatus, StockReportStatus } from "./enums";
 
 export interface Product {
     id: string;
@@ -202,6 +202,22 @@ export interface Brand  {
     name: string;
     description?: string;
 
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface StockReport {
+    id: string;
+    variantId: string;
+    locationId: string;
+    expectedQuantity: number;
+    foundQuantity: number;
+    reason: string;
+    status: StockReportStatus;
+    reportedByUserId: string;
+    resolvedByUserId?: string | null;
+    resolutionNote?: string | null;
+    resolvedAt?: string | null;
     createdAt: string;
     updatedAt: string;
 }

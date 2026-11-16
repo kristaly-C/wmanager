@@ -10,6 +10,7 @@ import {
   SLOT_MODE_META,
 } from '@/utils/locationMeta'
 import StockAdjustModal from './StockAdjustModal.vue'
+import StockReportModal from './StockReportModal.vue'
 import DataTable, { type DataTablePageEvent } from 'primevue/datatable'
 import Column from 'primevue/column'
 import { useToast } from 'primevue/usetoast'
@@ -17,6 +18,10 @@ import { useToast } from 'primevue/usetoast'
 const props = defineProps<{
   allLocations: LocationItem[]
   canAdjustStock: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'report-created'): void
 }>()
 
 const toast = useToast()
@@ -37,6 +42,11 @@ let activeAbortController: AbortController | null = null
 const isAdjustModalOpen = ref(false)
 const adjustInitialLocationId = ref<string | null>(null)
 const adjustInitialVariantId = ref<string | null>(null)
+
+const isReportModalOpen = ref(false)
+const reportInitialLocationId = ref<string | null>(null)
+const reportInitialVariantId = ref<string | null>(null)
+const reportInitialExpectedQty = ref<number | null>(null)
 
 const locationById = computed(() => new Map(props.allLocations.map((l) => [l.id, l])))
 
@@ -172,8 +182,19 @@ function openRowAdjustModal(item: StockItemEntry) {
   isAdjustModalOpen.value = true
 }
 
+function openRowReportModal(item: StockItemEntry) {
+  reportInitialLocationId.value = item.locationId
+  reportInitialVariantId.value = item.variantId
+  reportInitialExpectedQty.value = item.quantity
+  isReportModalOpen.value = true
+}
+
 function onStockSaved() {
   void loadStockItems()
+}
+
+function onReportSaved() {
+  emit('report-created')
 }
 
 onMounted(() => {
@@ -206,8 +227,8 @@ onBeforeUnmount(() => {
           @click="openCreateAdjustModal"
           class="bg-[#171918] hover:bg-[#2a2d2b] border border-white h-[40px] px-4 rounded-[12px] text-[13px] font-medium text-white flex items-center gap-2 shadow-xs transition cursor-pointer"
         >
-          <i class="pi pi-plus text-xs"></i>
-          <span>+ Készlet felvitele / korrekció</span>
+          <i class="pi pi-arrow-right-arrow-left text-xs"></i>
+          <span>Készlet áthelyezése / kezelése</span>
         </button>
       </div>
     </div>
@@ -385,14 +406,24 @@ onBeforeUnmount(() => {
 
         <Column v-if="canAdjustStock" header="Művelet" bodyClass="text-right" headerClass="text-right">
           <template #body="{ data }: { data: StockItemEntry }">
-            <button
-              v-if="!isExternalRow(data)"
-              type="button"
-              @click="openRowAdjustModal(data)"
-              class="h-[30px] px-2.5 rounded-[8px] bg-white border border-[#dce0d8] hover:border-[#171918] hover:bg-[#171918] text-[#171918] hover:text-white text-[11px] font-semibold transition cursor-pointer whitespace-nowrap"
-            >
-              Korrekció / +Készlet
-            </button>
+            <div v-if="!isExternalRow(data)" class="inline-flex items-center justify-end gap-1.5">
+              <button
+                type="button"
+                @click="openRowAdjustModal(data)"
+                class="h-[30px] px-2.5 rounded-[8px] bg-white border border-[#dce0d8] hover:border-[#171918] hover:bg-[#171918] text-[#171918] hover:text-white text-[11px] font-semibold transition cursor-pointer whitespace-nowrap"
+              >
+                Áthelyezés
+              </button>
+              <button
+                type="button"
+                @click="openRowReportModal(data)"
+                class="h-[30px] px-2.5 rounded-[8px] bg-white border border-amber-200 hover:bg-amber-50 text-amber-800 text-[11px] font-semibold inline-flex items-center gap-1 transition cursor-pointer whitespace-nowrap"
+                title="Hiány vagy eltérés jelentése erről a pozícióról"
+              >
+                <i class="pi pi-exclamation-triangle text-[10px] text-amber-600"></i>
+                <span>Hiány jelentése</span>
+              </button>
+            </div>
           </template>
         </Column>
       </DataTable>
@@ -404,6 +435,15 @@ onBeforeUnmount(() => {
       :initialVariantId="adjustInitialVariantId"
       :allLocations="allLocations"
       @saved="onStockSaved"
+    />
+
+    <StockReportModal
+      v-model:visible="isReportModalOpen"
+      :initialLocationId="reportInitialLocationId"
+      :initialVariantId="reportInitialVariantId"
+      :initialExpectedQty="reportInitialExpectedQty"
+      :allLocations="allLocations"
+      @saved="onReportSaved"
     />
   </div>
 </template>
