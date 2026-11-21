@@ -54,10 +54,14 @@ const kpiStats = [
             <i class="pi pi-ellipsis-h"></i>
           </button>
         </div>
-        <!-- Illusztráció helye (később ide jöhet saját 3D render vagy grafika) -->
-        <div class="relative h-64 mt-4 bg-gradient-to-br from-slate-50 to-slate-100 flex justify-center items-center">
-           <!-- Placeholder egy szép 3D teherautónak vagy doboznak -->
-           <img src="https://cdn3d.iconscout.com/3d/premium/thumb/delivery-truck-4993635-4161118.png" alt="Truck" class="h-56 object-contain drop-shadow-2xl z-10" />
+        <!-- Illusztráció helye -->
+        <div class="relative h-64 mt-4 bg-gradient-to-br from-slate-50 to-slate-100 flex flex-col justify-center items-center gap-3">
+           <div class="relative z-10 w-24 h-24 rounded-3xl bg-white border border-slate-200/80 shadow-lg flex items-center justify-center text-orange-500">
+             <i class="pi pi-truck text-5xl"></i>
+           </div>
+           <span class="relative z-10 text-xs font-semibold text-slate-500 bg-white/80 px-3 py-1 rounded-full border border-slate-200/60">
+             Folyamatban lévő szállítás
+           </span>
            
            <!-- Díszítő háttérelem -->
            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-orange-400/20 blur-3xl rounded-full"></div>

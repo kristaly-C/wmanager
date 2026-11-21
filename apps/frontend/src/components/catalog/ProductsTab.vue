@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { Role } from '@wmanager/shared-types'
 import { useAuthStore } from '@/stores/auth'
 import { productApi, type ProductListItem } from '@/api/products'
@@ -10,17 +11,20 @@ import { supplierApi, type SupplierItem } from '@/api/suppliers'
 import { locationApi, type LocationItem } from '@/api/locations'
 import { stockApi, type StockItemEntry, type StockMovementEntry } from '@/api/stock'
 import { extractApiError } from '@/utils/locationMeta'
+import { canSeeCostPrice as hasCostPriceAccess } from '@/utils/procurementMeta'
 import ProductListSidebar from './ProductListSidebar.vue'
 import ProductVariantsSection from './ProductVariantsSection.vue'
 import ProductStockSection from './ProductStockSection.vue'
 import ProductFormModal from './ProductFormModal.vue'
 import VariantFormModal from './VariantFormModal.vue'
 import VariantBarcodesModal from './VariantBarcodesModal.vue'
+import VariantSuppliersModal from './VariantSuppliersModal.vue'
 import StockAdjustModal from '@/components/inventory/StockAdjustModal.vue'
 import StockReportModal from '@/components/inventory/StockReportModal.vue'
 import ConfirmDeleteDialog from '@/components/common/ConfirmDeleteDialog.vue'
 import { useToast } from 'primevue/usetoast'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
 
@@ -44,17 +48,8 @@ const canAdjustStock = computed(() => {
 
 const canReportStock = computed(() => canAdjustStock.value)
 
-const COST_PRICE_ROLES: Role[] = [
-  Role.BOSS,
-  Role.ADMIN,
-  Role.WAREHOUSE_MANAGER,
-  Role.STORE_MANAGER,
-  Role.ORDER_CLERK,
-]
-
 const canSeeCostPrice = computed(() => {
-  const role = authStore.user?.role
-  if (!role || !COST_PRICE_ROLES.includes(role)) return false
+  if (!hasCostPriceAccess(authStore.user?.role)) return false
   if (variants.value.length > 0 && variants.value.every((v) => v.costPrice === undefined)) {
     return false
   }
@@ -126,6 +121,10 @@ const deletingVariant = ref(false)
 // Modal állapotok – Vonalkódok
 const isBarcodesModalOpen = ref(false)
 const barcodeModalVariant = ref<VariantItem | null>(null)
+
+// Modal állapotok – Variáns beszállítók
+const isSuppliersModalOpen = ref(false)
+const suppliersModalVariant = ref<VariantItem | null>(null)
 
 const selectedProduct = computed(
   () => products.value.find((p) => p.id === selectedProductId.value) ?? null,
@@ -316,6 +315,12 @@ async function loadVariants(productId: string) {
       const updated = res.data.find((v) => v.id === barcodeModalVariant.value?.id)
       if (updated) {
         barcodeModalVariant.value = updated
+      }
+    }
+    if (suppliersModalVariant.value) {
+      const updated = res.data.find((v) => v.id === suppliersModalVariant.value?.id)
+      if (updated) {
+        suppliersModalVariant.value = updated
       }
     }
   } catch (err) {
@@ -538,6 +543,21 @@ function openBarcodesModal(variant: VariantItem) {
 }
 
 async function onBarcodesUpdated() {
+  if (!selectedProduct.value) return
+  await loadVariants(selectedProduct.value.id)
+}
+
+// Beszállítók modal és ártörténet navigáció
+function openSuppliersModal(variant: VariantItem) {
+  suppliersModalVariant.value = variant
+  isSuppliersModalOpen.value = true
+}
+
+function openVariantAnalytics(variant: VariantItem) {
+  void router.push({ path: '/analytics', query: { variantId: variant.id } })
+}
+
+async function onSuppliersUpdated() {
   if (!selectedProduct.value) return
   await loadVariants(selectedProduct.value.id)
 }
@@ -895,6 +915,8 @@ onBeforeUnmount(() => {
         @edit-variant="openEditVariant"
         @delete-variant="promptDeleteVariant"
         @open-barcodes="openBarcodesModal"
+        @manage-suppliers="openSuppliersModal"
+        @open-analytics="openVariantAnalytics"
         @adjust-stock="openStockAdjustModal(null, $event)"
         @select-hero-image="selectedHeroImage = $event"
       />
@@ -987,6 +1009,13 @@ onBeforeUnmount(() => {
       :variant="barcodeModalVariant"
       :can-manage="canManageCatalog"
       @updated="onBarcodesUpdated"
+    />
+
+    <!-- Variáns Beszállítók Modal -->
+    <VariantSuppliersModal
+      v-model:visible="isSuppliersModalOpen"
+      :variant="suppliersModalVariant"
+      @updated="onSuppliersUpdated"
     />
 
     <!-- Gyors készletfelvitel / korrekció Modal -->

@@ -101,6 +101,50 @@ const router = createRouter({
           redirect: '/inventory',
         },
         {
+          path: 'purchase-orders',
+          name: 'purchase-orders',
+          component: () => import('@/views/PurchaseOrdersView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.ORDER_CLERK,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+            ],
+          },
+        },
+        {
+          path: 'shipments',
+          name: 'shipments',
+          component: () => import('@/views/ShipmentsView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+              Role.ORDER_CLERK,
+            ],
+          },
+        },
+        {
+          path: 'analytics',
+          name: 'analytics',
+          component: () => import('@/views/AnalyticsView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.ORDER_CLERK,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+            ],
+          },
+        },
+        {
           path: 'control-panel',
           name: 'control-panel',
           component: ControlPanelView,
@@ -119,6 +163,36 @@ const router = createRouter({
           path: '',
           name: 'pda-home',
           component: PdaHomeView,
+        },
+        {
+          path: 'receiving',
+          name: 'pda-receiving',
+          component: () => import('@/views/PdaReceivingListView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+            ],
+          },
+        },
+        {
+          path: 'receiving/:id',
+          name: 'pda-putaway',
+          component: () => import('@/views/PdaPutawayView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+            ],
+          },
         },
       ],
     },

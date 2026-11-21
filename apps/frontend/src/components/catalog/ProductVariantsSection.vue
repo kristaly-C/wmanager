@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { VariantBarcodeItem, VariantItem } from '@/api/variants'
+import { useAuthStore } from '@/stores/auth'
 import { formatPrice, formatWeight } from '@/utils/formatters'
+import { canSeeCostPrice as hasCostPriceAccess } from '@/utils/procurementMeta'
+
+const authStore = useAuthStore()
 
 const props = defineProps<{
   variants: VariantItem[]
@@ -19,9 +23,13 @@ const emit = defineEmits<{
   (e: 'editVariant', variant: VariantItem): void
   (e: 'deleteVariant', variant: VariantItem): void
   (e: 'openBarcodes', variant: VariantItem): void
+  (e: 'manage-suppliers', variant: VariantItem): void
+  (e: 'open-analytics', variant: VariantItem): void
   (e: 'adjustStock', variantId: string): void
   (e: 'selectHeroImage', url: string): void
 }>()
+
+const canViewCostAnalytics = computed(() => hasCostPriceAccess(authStore.user?.role))
 
 const SIZE_ORDER: Record<string, number> = {
   XXS: 1,
@@ -207,10 +215,7 @@ const variantColorGroups = computed<VariantColorGroup[]>(() => {
                 <th class="py-2.5 px-3 text-right">Árak</th>
                 <th class="py-2.5 px-3">Vonalkód</th>
                 <th class="py-2.5 px-3 text-right">Készlet</th>
-                <th
-                  v-if="props.canManageCatalog || props.canAdjustStock"
-                  class="py-2.5 pl-3 pr-4 text-right"
-                >
+                <th class="py-2.5 pl-3 pr-4 text-right">
                   Műveletek
                 </th>
               </tr>
@@ -293,12 +298,26 @@ const variantColorGroups = computed<VariantColorGroup[]>(() => {
                   </span>
                 </td>
 
-                <!-- 5. Műveletek (max 3 kompakt gomb) -->
-                <td
-                  v-if="props.canManageCatalog || props.canAdjustStock"
-                  class="py-3 pl-3 pr-4 text-right whitespace-nowrap"
-                >
+                <!-- 5. Műveletek -->
+                <td class="py-3 pl-3 pr-4 text-right whitespace-nowrap">
                   <div class="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      @click="emit('manage-suppliers', v)"
+                      class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-amber-50 hover:border-amber-200 text-slate-600 hover:text-amber-700 flex items-center justify-center cursor-pointer transition"
+                      title="Beszállítók és beszerzési árak"
+                    >
+                      <i class="pi pi-building text-[11px]"></i>
+                    </button>
+                    <button
+                      v-if="canViewCostAnalytics"
+                      type="button"
+                      @click="emit('open-analytics', v)"
+                      class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-sky-50 hover:border-sky-200 text-slate-600 hover:text-sky-700 flex items-center justify-center cursor-pointer transition"
+                      title="Ártörténet és havi statisztika megnyitása"
+                    >
+                      <i class="pi pi-chart-line text-[11px]"></i>
+                    </button>
                     <button
                       v-if="props.canAdjustStock"
                       type="button"

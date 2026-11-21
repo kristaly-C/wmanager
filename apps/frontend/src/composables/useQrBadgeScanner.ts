@@ -47,6 +47,8 @@ export function useQrBadgeScanner(onBadgeScanned: (qrToken: string, isBusy: bool
     }
 
     function handleKeyDown(e: KeyboardEvent) {
+        if (typeof e.key !== 'string') return
+
         const now = Date.now()
         const timeDiff = now - lastKeyTime
 

@@ -8,6 +8,7 @@ import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { ref } from 'vue'
 import { useQrBadgeScanner } from '@/composables/useQrBadgeScanner'
+import { extractApiError } from '@/utils/locationMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,8 +19,8 @@ const workspaceStore = useWorkspaceStore()
 // Amikor a felhasználó munkaterületet vált a legördülőben
 function onWorkspaceChange(newId: WorkspaceId) {
   workspaceStore.setWorkspace(newId)
-  // Átnavigálunk az adott munkaterület első menüpontjára (Dashboardra)
-  const firstNav = workspaceStore.activeWorkspace?.navItems[0]
+  // Átnavigálunk az adott munkaterület első aktív menüpontjára (Dashboardra)
+  const firstNav = workspaceStore.activeWorkspace?.navItems.find((item) => !item.disabled)
   if (firstNav) {
     router.push(firstNav.to)
   }
@@ -73,8 +74,8 @@ useQrBadgeScanner(async (qrToken, isBusy) => {
     }
     // 4. Ha szabad a gép, kérdés nélkül azonnal átváltunk!
     completeUserSwitch(result.accessToken, result.user)
-  } catch (err: any) {
-    showSwitchBanner(err.response?.data?.message || 'Érvénytelen QR-kód!')
+  } catch (err: unknown) {
+    showSwitchBanner(extractApiError(err, 'Érvénytelen QR-kód!'))
   }
 })
 </script>
@@ -122,22 +123,32 @@ useQrBadgeScanner(async (qrToken, isBusy) => {
         v-if="workspaceStore.activeWorkspace"
         class="bg-white/90 backdrop-blur-md border border-white rounded-2xl p-1.5 shadow-sm flex items-center gap-1 overflow-x-auto max-w-full"
       >
-        <RouterLink
-          v-for="item in workspaceStore.activeWorkspace.navItems"
-          :key="item.to"
-          :to="item.to"
-          :title="item.label"
-          class="flex items-center gap-2 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap shrink-0"
-          :class="
-            route.path === item.to
-              ? 'bg-slate-900 text-white px-4 py-2 shadow-md'
-              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 px-3 py-2'
-          "
-        >
-          <i :class="[item.icon, 'text-base']"></i>
-          <!-- Csak az aktív menüpont szövegét írjuk ki, ahogy a referencia képen! -->
-          <span v-if="route.path === item.to">{{ item.label }}</span>
-        </RouterLink>
+        <template v-for="item in workspaceStore.activeWorkspace.navItems" :key="item.to">
+          <button
+            v-if="item.disabled"
+            type="button"
+            disabled
+            :title="`${item.label} (hamarosan)`"
+            class="flex items-center gap-2 rounded-xl text-sm font-semibold whitespace-nowrap shrink-0 px-3 py-2 text-slate-300 cursor-not-allowed"
+          >
+            <i :class="[item.icon, 'text-base']"></i>
+          </button>
+          <RouterLink
+            v-else
+            :to="item.to"
+            :title="item.label"
+            class="flex items-center gap-2 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap shrink-0"
+            :class="
+              route.path === item.to
+                ? 'bg-slate-900 text-white px-4 py-2 shadow-md'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 px-3 py-2'
+            "
+          >
+            <i :class="[item.icon, 'text-base']"></i>
+            <!-- Csak az aktív menüpont szövegét írjuk ki, ahogy a referencia képen! -->
+            <span v-if="route.path === item.to">{{ item.label }}</span>
+          </RouterLink>
+        </template>
       </nav>
     </div>
 

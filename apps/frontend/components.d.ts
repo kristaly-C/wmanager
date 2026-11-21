@@ -16,6 +16,9 @@ declare module 'vue' {
     ConfirmDeleteDialog: typeof import('./src/components/common/ConfirmDeleteDialog.vue')['default']
     Dialog: typeof import('primevue/dialog')['default']
     GlobalProductSearch: typeof import('./src/components/common/GlobalProductSearch.vue')['default']
+    GoodsReceiptApproveModal: typeof import('./src/components/procurement/GoodsReceiptApproveModal.vue')['default']
+    GoodsReceiptFormModal: typeof import('./src/components/procurement/GoodsReceiptFormModal.vue')['default']
+    GoodsReceiptsTab: typeof import('./src/components/procurement/GoodsReceiptsTab.vue')['default']
     InitialStockModeCard: typeof import('./src/components/control-panel/InitialStockModeCard.vue')['default']
     LocationBulkModal: typeof import('./src/components/inventory/LocationBulkModal.vue')['default']
     LocationFormModal: typeof import('./src/components/inventory/LocationFormModal.vue')['default']
@@ -29,6 +32,9 @@ declare module 'vue' {
     ProductsTab: typeof import('./src/components/catalog/ProductsTab.vue')['default']
     ProductStockSection: typeof import('./src/components/catalog/ProductStockSection.vue')['default']
     ProductVariantsSection: typeof import('./src/components/catalog/ProductVariantsSection.vue')['default']
+    PurchaseOrderConfirmModal: typeof import('./src/components/procurement/PurchaseOrderConfirmModal.vue')['default']
+    PurchaseOrderFormModal: typeof import('./src/components/procurement/PurchaseOrderFormModal.vue')['default']
+    PurchaseOrdersTab: typeof import('./src/components/procurement/PurchaseOrdersTab.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     StatKpiCard: typeof import('./src/components/common/StatKpiCard.vue')['default']
@@ -42,5 +48,6 @@ declare module 'vue' {
     UserFormModal: typeof import('./src/components/users/UserFormModal.vue')['default']
     VariantBarcodesModal: typeof import('./src/components/catalog/VariantBarcodesModal.vue')['default']
     VariantFormModal: typeof import('./src/components/catalog/VariantFormModal.vue')['default']
+    VariantSuppliersModal: typeof import('./src/components/catalog/VariantSuppliersModal.vue')['default']
   }
 }
