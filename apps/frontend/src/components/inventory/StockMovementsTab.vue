@@ -316,10 +316,12 @@ onBeforeUnmount(() => {
               </p>
               <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-[#686f6a] mt-0.5">
                 <span class="font-mono text-[#171918] font-medium">{{ data.variant.sku }}</span>
-                <span>·</span>
-                <span class="bg-[#eff1ed] text-[#171918] font-semibold px-1.5 py-0.5 rounded">
-                  {{ data.variant.size }}
-                </span>
+                <template v-if="data.variant.size">
+                  <span>·</span>
+                  <span class="bg-[#eff1ed] text-[#171918] font-semibold px-1.5 py-0.5 rounded">
+                    {{ data.variant.size }}
+                  </span>
+                </template>
                 <span v-if="data.variant.colors.length > 0">
                   {{ data.variant.colors.join(', ') }}
                 </span>

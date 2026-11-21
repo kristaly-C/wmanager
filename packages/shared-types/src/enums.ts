@@ -33,8 +33,19 @@ export enum LocationType {
     MANUAL_CORRECTION = 'MANUAL_CORRECTION',     // kézi javítás (pl. sérült áru leírása)
   }
   export enum PurchaseOrderStatus {
-    PENDING = 'PENDING',
+    DRAFT = 'DRAFT',
+    ORDERED = 'ORDERED',
+    CONFIRMED = 'CONFIRMED',
+    PARTIALLY_RECEIVED = 'PARTIALLY_RECEIVED',
     RECEIVED = 'RECEIVED',
+    CLOSED = 'CLOSED',
+    CANCELLED = 'CANCELLED',
+  }
+  export enum GoodsReceiptStatus {
+    OPEN = 'OPEN',
+    IN_PROGRESS = 'IN_PROGRESS',
+    WAITING_FOR_APPROVAL = 'WAITING_FOR_APPROVAL',
+    COMPLETED = 'COMPLETED',
     CANCELLED = 'CANCELLED',
   }
   export enum StockTransferStatus {

@@ -139,9 +139,12 @@ function mapVariantToQuickInfo(v: VariantItem): QuickProductInfo {
     productId: v.productId,
     name: v.product?.name ?? v.sku,
     variantLabel,
+    size: v.size ?? null,
+    colors: v.colors ?? [],
     sku: v.sku,
     barcode,
-    price: Number(v.price ?? 0),
+    grossPrice: Number(v.grossPrice ?? 0),
+    netPrice: Number(v.netPrice ?? 0),
     freeStock,
     shelf,
     imageUrl: v.imageUrls?.[0] ?? v.product?.imageUrls?.[0] ?? null,
@@ -554,7 +557,7 @@ onUnmounted(() => {
                 </span>
 
                 <span>Vonalkód: <b class="font-mono text-slate-700">{{ item.barcode }}</b></span>
-                <span>Ár: <b class="text-slate-800">{{ item.price.toLocaleString('hu-HU') }} Ft</b></span>
+                <span>Bruttó ár: <b class="text-slate-800">{{ item.grossPrice.toLocaleString('hu-HU') }} Ft</b></span>
               </div>
             </div>
           </div>
@@ -673,9 +676,12 @@ onUnmounted(() => {
 
         <div class="flex gap-3 shrink-0">
           <div class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-right">
-            <span class="block text-xs text-slate-400">Eladási ár</span>
+            <span class="block text-xs text-slate-400">Bruttó ár</span>
             <span class="text-lg font-black text-slate-900">
-              {{ searchStore.activeProductSheet.price.toLocaleString('hu-HU') }} Ft
+              {{ searchStore.activeProductSheet.grossPrice.toLocaleString('hu-HU') }} Ft
+            </span>
+            <span class="block text-[11px] text-slate-400 mt-0.5">
+              Nettó: {{ searchStore.activeProductSheet.netPrice.toLocaleString('hu-HU', { maximumFractionDigits: 2 }) }} Ft
             </span>
           </div>
           <div
@@ -829,38 +835,107 @@ onUnmounted(() => {
           Nincs további variáns.
         </div>
 
-        <div v-else class="flex flex-wrap gap-2">
-          <button
-            v-for="sibling in siblingVariants"
-            :key="sibling.id"
-            type="button"
-            @click="searchStore.openProductSheet(sibling)"
-            class="px-3 py-2 rounded-xl border text-left transition cursor-pointer flex items-center gap-3"
-            :class="
-              sibling.id === searchStore.activeProductSheet.id
-                ? 'border-orange-500 bg-orange-50 text-orange-950 shadow-sm'
-                : 'border-slate-200 bg-slate-50/70 hover:border-orange-300 hover:bg-orange-50/40 text-slate-800'
-            "
-          >
-            <div>
-              <div class="text-xs font-bold">
-                {{ sibling.variantLabel || sibling.sku }}
-              </div>
-              <div class="text-[11px] font-mono text-slate-500">
-                {{ sibling.sku }}
-              </div>
-            </div>
-            <span
-              class="text-xs font-black px-2 py-0.5 rounded-md"
-              :class="
-                sibling.freeStock > 0
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-rose-100 text-rose-700'
-              "
-            >
-              {{ sibling.freeStock }} db
-            </span>
-          </button>
+        <div
+          v-else
+          class="overflow-x-auto max-h-64 overflow-y-auto rounded-xl border border-slate-200"
+        >
+          <table class="w-full text-left border-collapse text-xs">
+            <thead class="sticky top-0 bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <tr>
+                <th class="py-2.5 px-3">Méret</th>
+                <th class="py-2.5 px-3">Szín</th>
+                <th class="py-2.5 px-3">SKU</th>
+                <th class="py-2.5 px-3">Vonalkód</th>
+                <th class="py-2.5 px-3">Polchely</th>
+                <th class="py-2.5 px-3 text-right">Ár</th>
+                <th class="py-2.5 px-3 text-right">Szabad készlet</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr
+                v-for="sibling in siblingVariants"
+                :key="sibling.id"
+                @click="searchStore.openProductSheet(sibling)"
+                class="cursor-pointer transition"
+                :class="
+                  sibling.id === searchStore.activeProductSheet.id
+                    ? 'bg-orange-50/80 text-orange-950'
+                    : 'bg-white hover:bg-slate-50 text-slate-800'
+                "
+              >
+                <td class="py-2.5 px-3 font-bold whitespace-nowrap">
+                  <span
+                    class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold"
+                    :class="
+                      sibling.id === searchStore.activeProductSheet.id
+                        ? 'bg-orange-100 text-orange-900'
+                        : 'bg-slate-100 text-slate-800'
+                    "
+                  >
+                    {{ sibling.size || '—' }}
+                  </span>
+                </td>
+                <td class="py-2.5 px-3 text-slate-600">
+                  {{ sibling.colors && sibling.colors.length > 0 ? sibling.colors.join(', ') : '—' }}
+                </td>
+                <td class="py-2.5 px-3 font-mono whitespace-nowrap">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="font-semibold text-slate-900">{{ sibling.sku }}</span>
+                    <button
+                      type="button"
+                      @click.stop="copySku(sibling.sku)"
+                      class="text-slate-400 hover:text-orange-600 transition cursor-pointer"
+                      title="SKU másolása vágólapra"
+                    >
+                      <i
+                        :class="
+                          copiedSku === sibling.sku
+                            ? 'pi pi-check text-emerald-600 font-bold'
+                            : 'pi pi-copy'
+                        "
+                        class="text-[11px]"
+                      ></i>
+                    </button>
+                  </span>
+                </td>
+                <td class="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap">
+                  {{ sibling.barcode }}
+                </td>
+                <td class="py-2.5 px-3 font-mono whitespace-nowrap">
+                  <span
+                    class="px-2 py-0.5 rounded-md text-[11px] font-semibold"
+                    :class="
+                      sibling.shelf === 'Nincs polcon'
+                        ? 'bg-slate-100 text-slate-500'
+                        : 'bg-orange-50 text-orange-700'
+                    "
+                  >
+                    {{ sibling.shelf }}
+                  </span>
+                </td>
+                <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                  <span class="font-bold text-slate-900 block">
+                    {{ sibling.grossPrice.toLocaleString('hu-HU') }} Ft
+                  </span>
+                  <span class="text-[10px] text-slate-400 block">
+                    Nettó: {{ sibling.netPrice.toLocaleString('hu-HU', { maximumFractionDigits: 2 }) }} Ft
+                  </span>
+                </td>
+                <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                  <span
+                    class="text-xs font-black px-2 py-0.5 rounded-md inline-block"
+                    :class="
+                      sibling.freeStock > 0
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-rose-100 text-rose-700'
+                    "
+                  >
+                    {{ sibling.freeStock }} db
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

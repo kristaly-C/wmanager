@@ -10,10 +10,10 @@ export class CreateProductDto {
     @IsUUID()
     brandId!: string;
 
+    @IsOptional()
     @IsString()
-    @MinLength(1)
     @MaxLength(100)
-    gender!: string;
+    gender?: string;
 
     @IsOptional()
     @IsString()
@@ -25,15 +25,15 @@ export class CreateProductDto {
     @MaxLength(255)
     material?: string;
 
+    @IsOptional()
     @IsString()
-    @MinLength(1)
     @MaxLength(150)
-    model!: string;
+    model?: string;
 
+    @IsOptional()
     @IsString()
-    @MinLength(1)
     @MaxLength(150)
-    manufacturerCode!: string;
+    manufacturerCode?: string;
 
     @IsString()
     @IsOptional()
@@ -44,6 +44,40 @@ export class CreateProductDto {
     @IsOptional()
     @MaxLength(5000)
     description?: string;
+
+    @IsOptional()
+    @IsString()
+    @MinLength(1)
+    @MaxLength(20)
+    unit?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(32)
+    vtszCode?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(10)
+    originCountry?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(1000)
+    importantNote?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(50)
+    season?: string;
+
+    @IsOptional()
+    @IsBoolean()
+    isSerialized?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    isPurchasable?: boolean;
 
     @IsNumber()
     @Min(0)
@@ -58,11 +92,12 @@ export class CreateProductDto {
     @IsBoolean()
     isActive?: boolean;
 
+    @IsOptional()
     @IsArray()
     @ArrayMaxSize(20)
     @IsUrl({ protocols: ['http', 'https'], require_protocol: true }, { each: true })
     @MaxLength(2048, { each: true })
-    imageUrls!: string[];
+    imageUrls?: string[];
 
     @IsOptional()
     @IsObject()

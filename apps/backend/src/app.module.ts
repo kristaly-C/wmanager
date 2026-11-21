@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { PrismaModule } from './prisma/prisma.module';
 import { CategoryModule } from './category/category.module';
 import { SupplierModule } from './supplier/supplier.module';
@@ -13,6 +14,8 @@ import { BrandModule } from './brand/brand.module';
 import { LocationModule } from './location/location.module';
 import { StockModule } from './stock/stock.module';
 import { StocktakeModule } from './stocktake/stocktake.module';
+import { PurchaseOrderModule } from './purchase-order/purchase-order.module';
+import { GoodsReceiptModule } from './goods-receipt/goods-receipt.module';
 
 function validateEnv(config: Record<string, unknown>) {
     const databaseUrl = config.DATABASE_URL;
@@ -43,7 +46,7 @@ function validateEnv(config: Record<string, unknown>) {
         ThrottlerModule.forRoot([
             {
                 ttl: 60000,
-                limit: 100,
+                limit: 500,
             },
         ]),
         PrismaModule,
@@ -56,13 +59,15 @@ function validateEnv(config: Record<string, unknown>) {
         BrandModule,
         LocationModule,
         StockModule,
-        StocktakeModule
+        StocktakeModule,
+        PurchaseOrderModule,
+        GoodsReceiptModule,
     ],
     controllers: [],
     providers: [
         {
             provide: APP_GUARD,
-            useClass: ThrottlerGuard,
+            useClass: AppThrottlerGuard,
         },
     ],
 })

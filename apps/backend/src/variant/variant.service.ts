@@ -147,15 +147,12 @@ export class VariantService extends BaseService<PrismaService['variant']> {
 
         const normalizedItems = dto.items.map((item) => {
             const sku = item.sku.trim();
-            const size = item.size.trim();
-            const colors = item.colors.map((c) => c.trim()).filter((c) => c.length > 0);
+            const size = item.size?.trim() || null;
+            const colors = (item.colors ?? []).map((c) => c.trim()).filter((c) => c.length > 0);
             const primaryBarcode = item.primaryBarcode?.trim() || undefined;
 
-            if (!sku || !size) {
-                throw new BadRequestException('Az SKU és a méret megadása minden tételnél kötelező');
-            }
-            if (colors.length === 0) {
-                throw new BadRequestException('Minden variánshoz legalább egy színt meg kell adni');
+            if (!sku) {
+                throw new BadRequestException('Az SKU megadása minden tételnél kötelező');
             }
 
             const skuKey = sku.toUpperCase();
@@ -175,8 +172,11 @@ export class VariantService extends BaseService<PrismaService['variant']> {
                 sku,
                 size,
                 colors,
-                weight: item.weight,
-                price: item.price,
+                weight: item.weight ?? null,
+                netWeight: item.netWeight ?? null,
+                volume: item.volume ?? null,
+                netPrice: item.netPrice,
+                grossPrice: item.grossPrice,
                 costPrice: item.costPrice,
                 imageUrls: item.imageUrls?.map((u) => u.trim()).filter((u) => u.length > 0) ?? [],
                 isActive: item.isActive ?? true,
@@ -220,7 +220,10 @@ export class VariantService extends BaseService<PrismaService['variant']> {
                         size: item.size,
                         colors: item.colors,
                         weight: item.weight,
-                        price: item.price,
+                        netWeight: item.netWeight,
+                        volume: item.volume,
+                        netPrice: item.netPrice,
+                        grossPrice: item.grossPrice,
                         costPrice: item.costPrice,
                         imageUrls: item.imageUrls,
                         isActive: item.isActive,

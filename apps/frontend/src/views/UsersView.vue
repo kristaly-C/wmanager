@@ -4,8 +4,15 @@ import { Role, LocationType } from '@wmanager/shared-types'
 import { useAuthStore } from '@/stores/auth'
 import { userApi, type UserItem } from '@/api/users'
 import { locationApi, type LocationItem } from '@/api/locations'
-import Dialog from 'primevue/dialog'
+import { extractApiError } from '@/utils/locationMeta'
 import { useToast } from 'primevue/usetoast'
+import StatKpiCard from '@/components/common/StatKpiCard.vue'
+import ConfirmDeleteDialog from '@/components/common/ConfirmDeleteDialog.vue'
+import UserDetailPanel, { type RoleMetaItem } from '@/components/users/UserDetailPanel.vue'
+import UserFormModal, {
+  type CreateUserSubmitPayload,
+  type EditUserSubmitPayload,
+} from '@/components/users/UserFormModal.vue'
 
 const authStore = useAuthStore()
 const toast = useToast()
@@ -26,35 +33,12 @@ const pageSize = ref(7)
 const selectedUserId = ref<string>('')
 
 // Modal állapotok
-const isCreateModalOpen = ref(false)
-const isEditModalOpen = ref(false)
+const isFormModalOpen = ref(false)
+const formModalMode = ref<'create' | 'edit'>('create')
 const isDeleteConfirmOpen = ref(false)
 
-// Új felhasználó űrlap
-const createForm = ref({
-  name: '',
-  email: '',
-  role: Role.WAREHOUSE_STAFF as Role,
-  password: '',
-  initialLocationId: '' as string,
-})
-
-// Szerkesztés űrlap
-const editForm = ref({
-  name: '',
-  email: '',
-  role: Role.WAREHOUSE_STAFF as Role,
-  isActive: true,
-})
-
-// Helyszín hozzárendelés legördülő
-const selectedLocationToAssign = ref<string>('')
-
 // Szerepkörök magyar elnevezése és jogosultság-leírása
-const ROLE_META: Record<
-  Role,
-  { label: string; isUnbound: boolean; permissions: string[] }
-> = {
+const ROLE_META: Record<Role, RoleMetaItem> = {
   [Role.BOSS]: {
     label: 'Tulajdonos / Ügyvezető',
     isUnbound: true,
@@ -128,6 +112,8 @@ const ROLE_META: Record<
     ],
   },
 }
+
+const currentActorId = computed(() => authStore.user?.userId ?? authStore.user?.id ?? '')
 
 // Létrehozáskor választható szerepkörök (BOSS-t seed hozza létre, ADMIN-t csak BOSS kezelhet)
 const assignableRoles = computed(() => {
@@ -252,13 +238,6 @@ function showFeedback(type: 'success' | 'error', msg: string) {
   })
 }
 
-function extractApiError(err: any, fallback: string): string {
-  const msg = err?.response?.data?.message
-  if (Array.isArray(msg)) return msg.join(', ')
-  if (typeof msg === 'string') return msg
-  return fallback
-}
-
 async function loadData() {
   loading.value = true
   try {
@@ -281,40 +260,39 @@ async function loadData() {
 }
 
 function openCreateModal() {
-  createForm.value = {
-    name: '',
-    email: '',
-    role: Role.WAREHOUSE_STAFF,
-    password: '',
-    initialLocationId: '',
-  }
-  isCreateModalOpen.value = true
+  formModalMode.value = 'create'
+  isFormModalOpen.value = true
 }
 
-async function handleCreateUser() {
+function openEditModal(user?: UserItem) {
+  const target = user ?? selectedUser.value
+  if (!target) return
+  selectedUserId.value = target.id
+  formModalMode.value = 'edit'
+  isFormModalOpen.value = true
+}
+
+async function handleCreateUser(payload: CreateUserSubmitPayload) {
   actionLoading.value = true
   try {
     const res = await userApi.create({
-      name: createForm.value.name.trim(),
-      email: createForm.value.email.trim(),
-      role: createForm.value.role,
-      password: createForm.value.password,
+      name: payload.name,
+      email: payload.email,
+      role: payload.role,
+      password: payload.password,
     })
     const createdUser = res.data
 
     // Ha helyhez kötött szerepkör és választott kezdő raktárat/üzletet, rögtön hozzárendeljük
     const isBound = !ROLE_META[createdUser.role]?.isUnbound
-    if (isBound && createForm.value.initialLocationId) {
-      const locRes = await userApi.assignLocation(
-        createdUser.id,
-        createForm.value.initialLocationId,
-      )
+    if (isBound && payload.initialLocationId) {
+      const locRes = await userApi.assignLocation(createdUser.id, payload.initialLocationId)
       createdUser.userLocations = [locRes.data]
     }
 
     users.value.unshift(createdUser)
     selectedUserId.value = createdUser.id
-    isCreateModalOpen.value = false
+    isFormModalOpen.value = false
     showFeedback('success', `${createdUser.name} sikeresen létrehozva!`)
   } catch (err) {
     showFeedback('error', extractApiError(err, 'Hiba történt a felhasználó létrehozásakor.'))
@@ -323,35 +301,20 @@ async function handleCreateUser() {
   }
 }
 
-function openEditModal(user?: UserItem) {
-  const target = user ?? selectedUser.value
-  if (!target) return
-  selectedUserId.value = target.id
-  editForm.value = {
-    name: target.name,
-    email: target.email,
-    role: target.role,
-    isActive: target.isActive,
-  }
-  selectedLocationToAssign.value = ''
-  isEditModalOpen.value = true
-}
-
-async function handleUpdateUser() {
-  if (!selectedUser.value) return
+async function handleUpdateUser(payload: EditUserSubmitPayload) {
   actionLoading.value = true
   try {
-    const res = await userApi.update(selectedUser.value.id, {
-      name: editForm.value.name.trim(),
-      email: editForm.value.email.trim(),
-      role: editForm.value.role,
-      isActive: editForm.value.isActive,
+    const res = await userApi.update(payload.id, {
+      name: payload.name,
+      email: payload.email,
+      role: payload.role,
+      isActive: payload.isActive,
     })
-    const idx = users.value.findIndex((u) => u.id === selectedUser.value!.id)
+    const idx = users.value.findIndex((u) => u.id === payload.id)
     if (idx !== -1) {
       users.value[idx] = res.data
     }
-    isEditModalOpen.value = false
+    isFormModalOpen.value = false
     showFeedback('success', 'A felhasználó adatai és hozzáférése frissítve!')
   } catch (err) {
     showFeedback('error', extractApiError(err, 'Nem sikerült módosítani a felhasználót.'))
@@ -360,19 +323,15 @@ async function handleUpdateUser() {
   }
 }
 
-async function handleAssignLocation() {
-  if (!selectedUser.value || !selectedLocationToAssign.value) return
+async function handleAssignLocation(locationId: string) {
+  if (!selectedUser.value || !locationId) return
   actionLoading.value = true
   try {
-    const res = await userApi.assignLocation(
-      selectedUser.value.id,
-      selectedLocationToAssign.value,
-    )
+    const res = await userApi.assignLocation(selectedUser.value.id, locationId)
     if (!selectedUser.value.userLocations) {
       selectedUser.value.userLocations = []
     }
     selectedUser.value.userLocations.push(res.data)
-    selectedLocationToAssign.value = ''
     showFeedback('success', 'Raktár / üzlet sikeresen hozzárendelve!')
   } catch (err) {
     showFeedback('error', extractApiError(err, 'Nem sikerült hozzárendelni a helyszínt.'))
@@ -426,7 +385,7 @@ async function handleDeleteUser() {
     users.value = users.value.filter((u) => u.id !== deletedId)
     selectedUserId.value = users.value[0]?.id ?? ''
     isDeleteConfirmOpen.value = false
-    isEditModalOpen.value = false
+    isFormModalOpen.value = false
     showFeedback('success', `${deletedName} véglegesen törölve.`)
   } catch (err) {
     showFeedback('error', extractApiError(err, 'Nem sikerült törölni a felhasználót.'))
@@ -463,7 +422,7 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6 text-[#171918]">
-    <!-- 1. OLDALFEJLÉC (Figma Node 2:27) -->
+    <!-- 1. OLDALFEJLÉC -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-[30px] font-semibold tracking-[-0.42px] text-[#171918] leading-tight">
@@ -496,76 +455,40 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 2. NÉGY MUTATÓ KÁRTYA (Figma Node 2:28) -->
+    <!-- 2. NÉGY MUTATÓ KÁRTYA -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-      <!-- Kártya 1: Összes felhasználó -->
-      <div class="bg-[#f6f7f5] border border-white rounded-[19px] h-[110px] p-4 flex items-start gap-4 shadow-2xs">
-        <div class="bg-white rounded-[14px] size-[50px] flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-          <i class="pi pi-users text-[20px] text-[#171918]"></i>
-        </div>
-        <div class="min-w-0">
-          <p class="text-[12px] text-[#686f6a] tracking-[-0.168px]">Összes felhasználó</p>
-          <p class="text-[30px] font-semibold text-[#171918] leading-tight tracking-[-0.42px]">
-            {{ totalUsersCount }}
-          </p>
-          <p class="text-[11px] font-medium text-[#298653] mt-0.5">
-            +{{ newUsersThisMonth }} ebben a hónapban
-          </p>
-        </div>
-      </div>
-
-      <!-- Kártya 2: Aktív felhasználók -->
-      <div class="bg-[#f6f7f5] border border-white rounded-[19px] h-[110px] p-4 flex items-start gap-4 shadow-2xs">
-        <div class="bg-white rounded-[14px] size-[50px] flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-          <i class="pi pi-check text-[20px] text-[#298653]"></i>
-        </div>
-        <div class="min-w-0">
-          <p class="text-[12px] text-[#686f6a] tracking-[-0.168px]">Aktív felhasználók</p>
-          <p class="text-[30px] font-semibold text-[#171918] leading-tight tracking-[-0.42px]">
-            {{ activeUsersCount }}
-          </p>
-          <p class="text-[11px] font-medium text-[#686f6a] mt-0.5">
-            {{ activePercentage }} aktív
-          </p>
-        </div>
-      </div>
-
-      <!-- Kártya 3: Helyhez kötött dolgozók (Raktár/Bolt) -->
-      <div class="bg-[#f6f7f5] border border-white rounded-[19px] h-[110px] p-4 flex items-start gap-4 shadow-2xs">
-        <div class="bg-white rounded-[14px] size-[50px] flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-          <i class="pi pi-building text-[20px] text-[#f46714]"></i>
-        </div>
-        <div class="min-w-0">
-          <p class="text-[12px] text-[#686f6a] tracking-[-0.168px]">Raktárhoz / bolthoz kötött</p>
-          <p class="text-[30px] font-semibold text-[#171918] leading-tight tracking-[-0.42px]">
-            {{ locationBoundUsersCount }}
-          </p>
-          <p class="text-[11px] font-medium text-[#686f6a] mt-0.5">
-            {{ rootLocations.length }} aktív raktár és üzlet
-          </p>
-        </div>
-      </div>
-
-      <!-- Kártya 4: Szerepkörök -->
-      <div class="bg-[#f6f7f5] border border-white rounded-[19px] h-[110px] p-4 flex items-start gap-4 shadow-2xs">
-        <div class="bg-white rounded-[14px] size-[50px] flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-          <i class="pi pi-shield text-[20px] text-[#171918]"></i>
-        </div>
-        <div class="min-w-0">
-          <p class="text-[12px] text-[#686f6a] tracking-[-0.168px]">Szerepkörök</p>
-          <p class="text-[30px] font-semibold text-[#171918] leading-tight tracking-[-0.42px]">
-            {{ distinctRolesCount }}
-          </p>
-          <p class="text-[11px] font-medium text-[#686f6a] mt-0.5">
-            Szerepkör- és raktáralapú védelem
-          </p>
-        </div>
-      </div>
+      <StatKpiCard
+        label="Összes felhasználó"
+        :value="totalUsersCount"
+        :subtext="`+${newUsersThisMonth} ebben a hónapban`"
+        subtext-class="text-[#298653]"
+        icon="pi pi-users"
+      />
+      <StatKpiCard
+        label="Aktív felhasználók"
+        :value="activeUsersCount"
+        :subtext="`${activePercentage} aktív`"
+        icon="pi pi-check"
+        icon-class="text-[#298653]"
+      />
+      <StatKpiCard
+        label="Raktárhoz / bolthoz kötött"
+        :value="locationBoundUsersCount"
+        :subtext="`${rootLocations.length} aktív raktár és üzlet`"
+        icon="pi pi-building"
+        icon-class="text-[#f46714]"
+      />
+      <StatKpiCard
+        label="Szerepkörök"
+        :value="distinctRolesCount"
+        subtext="Szerepkör- és raktáralapú védelem"
+        icon="pi pi-shield"
+      />
     </div>
 
-    <!-- 3. FŐ MUNKATERÜLET: Bal 8 oszlop (Csapattagok táblázat), Jobb 4 oszlop (2 részletkártya) -->
+    <!-- 3. FŐ MUNKATERÜLET: Bal 8 oszlop (Csapattagok táblázat), Jobb 4 oszlop (Részletpanel) -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-      <!-- BAL OLDAL: Csapattagok lista (Figma Node 2:300) -->
+      <!-- BAL OLDAL: Csapattagok lista -->
       <div class="lg:col-span-8 bg-[#f8f9f7] border border-white rounded-[16px] p-5 shadow-xs flex flex-col min-h-[640px]">
         <!-- Fejléc -->
         <div class="flex items-center justify-between pb-4 border-b border-[#e8eae6]">
@@ -624,7 +547,7 @@ onMounted(() => {
           </select>
         </div>
 
-        <!-- Táblázat fejléc (Figma Node 2:325) -->
+        <!-- Táblázat fejléc -->
         <div class="bg-[#eff1ed] h-[36px] rounded-[8px] px-4 grid grid-cols-12 items-center text-[11px] font-medium text-[#686f6a]">
           <div class="col-span-4">Név és e-mail</div>
           <div class="col-span-3">Szerepkör</div>
@@ -656,7 +579,7 @@ onMounted(() => {
                 : 'hover:bg-white/60'
             "
           >
-            <!-- Bal oldali narancssárga kijelölő csík (Figma Node 2:333) -->
+            <!-- Bal oldali narancssárga kijelölő csík -->
             <div
               v-if="selectedUser?.id === user.id"
               class="absolute left-0 top-[9px] h-[38px] w-[3px] bg-[#f46714] rounded-[2px]"
@@ -710,7 +633,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Alsó lapozó (Figma Node 2:427) -->
+        <!-- Alsó lapozó -->
         <div class="pt-4 mt-4 border-t border-[#e8eae6] flex flex-wrap items-center justify-between gap-3 text-[11px] text-[#686f6a]">
           <span>{{ paginationRangeText }}</span>
 
@@ -745,406 +668,49 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- JOBB OLDAL: 2 egymás alatti kártya (Figma Node 2:437 és 2:461) -->
-      <div v-if="selectedUser" class="lg:col-span-4 space-y-4">
-        <!-- 1. Kártya: Felhasználó adatai (Figma Node 2:437) -->
-        <div class="bg-[#f8f9f7] border border-white rounded-[16px] p-6 shadow-xs space-y-5">
-          <div class="flex items-center justify-between">
-            <h3 class="text-[18px] font-semibold text-[#171918]">Felhasználó adatai</h3>
-
-            <div v-if="canActorManageUser(selectedUser)" class="flex items-center gap-1">
-              <button
-                type="button"
-                @click="handleToggleActive(selectedUser)"
-                :disabled="actionLoading || selectedUser.id === authStore.user?.userId"
-                class="text-xs px-2.5 py-1 rounded-lg border border-[#e8eae6] bg-white hover:bg-slate-50 text-[#686f6a] hover:text-[#171918] cursor-pointer transition disabled:opacity-40"
-                :title="selectedUser.isActive ? 'Fiók felfüggesztése' : 'Fiók aktiválása'"
-              >
-                {{ selectedUser.isActive ? 'Tiltás' : 'Aktiválás' }}
-              </button>
-              <button
-                v-if="selectedUser.role !== Role.BOSS && selectedUser.id !== authStore.user?.userId"
-                type="button"
-                @click="isDeleteConfirmOpen = true"
-                class="text-xs p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 cursor-pointer transition"
-                title="Felhasználó törlése"
-              >
-                <i class="pi pi-trash text-xs"></i>
-              </button>
-            </div>
-          </div>
-
-          <!-- Szerepkör ikon + Név + Aktív jelvény -->
-          <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3.5 min-w-0">
-              <div class="bg-[#fff0e5] rounded-[14px] size-[52px] flex items-center justify-center shrink-0">
-                <i class="pi pi-shield text-[22px] text-[#f46714]"></i>
-              </div>
-              <div class="min-w-0">
-                <p class="text-[21px] font-semibold text-[#171918] leading-tight truncate">
-                  {{ selectedUser.name }}
-                </p>
-                <p class="text-[12px] text-[#686f6a] mt-0.5 truncate">
-                  {{ ROLE_META[selectedUser.role]?.label ?? selectedUser.role }} ·
-                  {{ formatUserLocationsLabel(selectedUser) }}
-                </p>
-              </div>
-            </div>
-
-            <span
-              class="inline-flex items-center px-2.5 py-1 rounded-[7px] text-[11px] font-medium shrink-0"
-              :class="
-                selectedUser.isActive
-                  ? 'bg-[#e5f0e8] text-[#298653]'
-                  : 'bg-[#eaeee8] text-[#686f6a]'
-              "
-            >
-              {{ selectedUser.isActive ? 'Aktív' : 'Inaktív' }}
-            </span>
-          </div>
-
-          <div class="h-px bg-[#e8eae6]"></div>
-
-          <!-- Adatmezők -->
-          <div class="space-y-3.5">
-            <div>
-              <span class="block text-[11px] text-[#686f6a]">E-mail</span>
-              <span class="block text-[13px] text-[#171918] mt-0.5">{{ selectedUser.email }}</span>
-            </div>
-
-            <div>
-              <span class="block text-[11px] text-[#686f6a]">Hozzárendelt raktár / üzlet</span>
-              <div
-                v-if="ROLE_META[selectedUser.role]?.isUnbound"
-                class="text-[13px] text-[#171918] mt-0.5"
-              >
-                Minden raktár és üzlet (globális szerepkör)
-              </div>
-              <div v-else class="mt-1.5 space-y-2">
-                <!-- Hozzárendelt raktárak chipjei eltávolítás gombbal -->
-                <div class="flex flex-wrap gap-1.5">
-                  <span
-                    v-if="!selectedUser.userLocations || selectedUser.userLocations.length === 0"
-                    class="text-[12px] text-amber-700 bg-[#fff0d9] px-2.5 py-1 rounded-[7px]"
-                  >
-                    Nincs még raktár vagy üzlet hozzárendelve
-                  </span>
-                  <span
-                    v-for="ul in selectedUser.userLocations"
-                    :key="ul.id"
-                    class="inline-flex items-center gap-1.5 bg-white border border-[#e8eae6] px-2.5 py-1 rounded-[8px] text-[12px] text-[#171918]"
-                  >
-                    <span>{{ ul.location?.name }}</span>
-                    <button
-                      v-if="canActorManageUser(selectedUser)"
-                      type="button"
-                      @click="handleUnassignLocation(ul.locationId)"
-                      class="text-[#686f6a] hover:text-rose-600 cursor-pointer"
-                      title="Hozzárendelés eltávolítása"
-                    >
-                      <i class="pi pi-times text-[10px]"></i>
-                    </button>
-                  </span>
-                </div>
-
-                <!-- Gyors raktár/bolt hozzárendelés -->
-                <div
-                  v-if="canActorManageUser(selectedUser) && availableLocationsForSelectedUser.length > 0"
-                  class="flex items-center gap-2 pt-1"
-                >
-                  <select
-                    v-model="selectedLocationToAssign"
-                    class="flex-1 h-[34px] bg-white border border-[#e8eae6] rounded-[8px] px-2.5 text-[12px] text-[#171918] outline-none"
-                  >
-                    <option value="">+ Raktár vagy üzlet hozzáadása...</option>
-                    <option
-                      v-for="loc in availableLocationsForSelectedUser"
-                      :key="loc.id"
-                      :value="loc.id"
-                    >
-                      {{ loc.name }} ({{ loc.type === LocationType.WAREHOUSE ? 'Raktár' : 'Üzlet' }})
-                    </option>
-                  </select>
-                  <button
-                    v-if="selectedLocationToAssign"
-                    type="button"
-                    @click="handleAssignLocation"
-                    :disabled="actionLoading"
-                    class="h-[34px] px-3 rounded-[8px] bg-[#171918] text-white text-xs font-medium cursor-pointer"
-                  >
-                    Hozzáadás
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2 pt-1">
-              <div>
-                <span class="block text-[11px] text-[#686f6a]">Regisztrálva</span>
-                <span class="block text-[13px] text-[#171918] mt-0.5">
-                  {{ formatDate(selectedUser.createdAt) }}
-                </span>
-              </div>
-              <div>
-                <span class="block text-[11px] text-[#686f6a]">Utolsó jelszócsere</span>
-                <span class="block text-[13px] text-[#171918] mt-0.5">
-                  {{ selectedUser.passwordChangedAt ? formatDate(selectedUser.passwordChangedAt) : 'Alapértelmezett' }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Hozzáférés szerkesztése gomb (Figma Node 2:457) -->
-          <button
-            v-if="canActorManageUser(selectedUser)"
-            type="button"
-            @click="openEditModal(selectedUser)"
-            class="w-full h-[44px] bg-[#171918] hover:bg-[#2a2d2b] border border-white rounded-[11px] px-4 text-[13px] font-medium text-white flex items-center justify-between transition cursor-pointer"
-          >
-            <span>Hozzáférés szerkesztése</span>
-            <i class="pi pi-arrow-right text-xs"></i>
-          </button>
-        </div>
-
-        <!-- 2. Kártya: Hozzáférés és biztonság (Figma Node 2:461) -->
-        <div class="bg-[#f8f9f7] border border-white rounded-[16px] p-6 shadow-xs space-y-4">
-          <div>
-            <h3 class="text-[17px] font-semibold text-[#171918]">Hozzáférés és biztonság</h3>
-            <p class="text-[12px] text-[#686f6a] mt-0.5">
-              {{ ROLE_META[selectedUser.role]?.label }} jogosultságok
-            </p>
-          </div>
-
-          <div class="space-y-2.5">
-            <div
-              v-for="perm in ROLE_META[selectedUser.role]?.permissions ?? []"
-              :key="perm"
-              class="flex items-start gap-2.5 text-[12px] text-[#171918]"
-            >
-              <i class="pi pi-check text-xs text-[#298653] mt-0.5 shrink-0"></i>
-              <span>{{ perm }}</span>
-            </div>
-          </div>
-
-          <div class="h-px bg-[#e8eae6]"></div>
-
-          <div class="flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3">
-              <i class="pi pi-lock text-[18px] text-[#f46714]"></i>
-              <div>
-                <p class="text-[12px] font-medium text-[#171918]">Helyszínalapú hozzáférés-védelem</p>
-                <p class="text-[11px] text-[#686f6a]">
-                  {{
-                    ROLE_META[selectedUser.role]?.isUnbound
-                      ? 'Minden telephelyre érvényes jogosultság'
-                      : 'Csak a hozzárendelt raktár/bolt hierarchiát éri el'
-                  }}
-                </p>
-              </div>
-            </div>
-            <span class="bg-[#e5f0e8] text-[#298653] text-[11px] font-medium px-2.5 py-1 rounded-[7px] shrink-0">
-              RBAC
-            </span>
-          </div>
-        </div>
-      </div>
+      <!-- JOBB OLDAL: Felhasználó részletei és jogosultságok -->
+      <UserDetailPanel
+        v-if="selectedUser"
+        class="lg:col-span-4"
+        :user="selectedUser"
+        :role-meta="ROLE_META"
+        :available-locations="availableLocationsForSelectedUser"
+        :can-manage="canActorManageUser(selectedUser)"
+        :is-self="selectedUser.id === currentActorId"
+        :loading="actionLoading"
+        @edit="openEditModal"
+        @toggle-active="handleToggleActive"
+        @request-delete="isDeleteConfirmOpen = true"
+        @assign-location="handleAssignLocation"
+        @unassign-location="handleUnassignLocation"
+      />
     </div>
 
-    <!-- 4. MODAL: ÚJ FELHASZNÁLÓ LÉTREHOZÁSA -->
-    <Dialog
-      v-model:visible="isCreateModalOpen"
-      modal
-      header="Új felhasználó létrehozása"
-      class="w-[95vw] max-w-md !rounded-2xl"
-    >
-      <form @submit.prevent="handleCreateUser" class="space-y-4 pt-2">
-        <div>
-          <label class="block text-xs font-semibold text-[#686f6a] mb-1">Teljes név</label>
-          <input
-            v-model="createForm.name"
-            type="text"
-            required
-            placeholder="Pl. Nagy Eszter"
-            class="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#f46714]"
-          />
-        </div>
+    <!-- 4. MODAL: ÚJ FELHASZNÁLÓ LÉTREHOZÁSA / SZERKESZTÉSE -->
+    <UserFormModal
+      v-model:visible="isFormModalOpen"
+      :mode="formModalMode"
+      :editing-user="selectedUser"
+      :assignable-roles="assignableRoles"
+      :root-locations="rootLocations"
+      :role-meta="ROLE_META"
+      :is-self="selectedUser?.id === currentActorId"
+      :loading="actionLoading"
+      @submit-create="handleCreateUser"
+      @submit-edit="handleUpdateUser"
+    />
 
-        <div>
-          <label class="block text-xs font-semibold text-[#686f6a] mb-1">E-mail cím</label>
-          <input
-            v-model="createForm.email"
-            type="email"
-            required
-            placeholder="eszter.nagy@ceg.hu"
-            class="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#f46714]"
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-[#686f6a] mb-1">Szerepkör</label>
-          <select
-            v-model="createForm.role"
-            class="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#f46714]"
-          >
-            <option v-for="r in assignableRoles" :key="r" :value="r">
-              {{ ROLE_META[r]?.label ?? r }}
-            </option>
-          </select>
-        </div>
-
-        <div v-if="!ROLE_META[createForm.role]?.isUnbound">
-          <label class="block text-xs font-semibold text-[#686f6a] mb-1">
-            Elsődleges raktár / üzlet (opcionális)
-          </label>
-          <select
-            v-model="createForm.initialLocationId"
-            class="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#f46714]"
-          >
-            <option value="">— Később rendelem hozzá —</option>
-            <option v-for="loc in rootLocations" :key="loc.id" :value="loc.id">
-              {{ loc.name }} ({{ loc.type === LocationType.WAREHOUSE ? 'Raktár' : 'Üzlet' }})
-            </option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-[#686f6a] mb-1">
-            Kezdeti jelszó (min. 8 karakter)
-          </label>
-          <input
-            v-model="createForm.password"
-            type="password"
-            required
-            minlength="8"
-            placeholder="••••••••"
-            class="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#f46714]"
-          />
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3">
-          <button
-            type="button"
-            @click="isCreateModalOpen = false"
-            class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 cursor-pointer"
-          >
-            Mégse
-          </button>
-          <button
-            type="submit"
-            :disabled="actionLoading"
-            class="px-4 py-2 rounded-xl bg-[#171918] text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
-          >
-            {{ actionLoading ? 'Mentés...' : 'Felhasználó létrehozása' }}
-          </button>
-        </div>
-      </form>
-    </Dialog>
-
-    <!-- 5. MODAL: FELHASZNÁLÓ ÉS HOZZÁFÉRÉS SZERKESZTÉSE -->
-    <Dialog
-      v-model:visible="isEditModalOpen"
-      modal
-      header="Felhasználó és hozzáférés szerkesztése"
-      class="w-[95vw] max-w-md !rounded-2xl"
-    >
-      <form v-if="selectedUser" @submit.prevent="handleUpdateUser" class="space-y-4 pt-2">
-        <div>
-          <label class="block text-xs font-semibold text-[#686f6a] mb-1">Teljes név</label>
-          <input
-            v-model="editForm.name"
-            type="text"
-            required
-            class="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#f46714]"
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-[#686f6a] mb-1">E-mail cím</label>
-          <input
-            v-model="editForm.email"
-            type="email"
-            required
-            class="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#f46714]"
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-[#686f6a] mb-1">Szerepkör</label>
-          <select
-            v-model="editForm.role"
-            :disabled="selectedUser.role === Role.BOSS || selectedUser.id === authStore.user?.userId"
-            class="w-full h-10 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-[#f46714] disabled:bg-slate-100"
-          >
-            <option v-if="selectedUser.role === Role.BOSS" :value="Role.BOSS">
-              {{ ROLE_META[Role.BOSS].label }}
-            </option>
-            <option v-for="r in assignableRoles" :key="r" :value="r">
-              {{ ROLE_META[r]?.label ?? r }}
-            </option>
-          </select>
-        </div>
-
-        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
-          <div>
-            <p class="text-xs font-semibold text-[#171918]">Fiók állapota</p>
-            <p class="text-[11px] text-[#686f6a]">Inaktív felhasználó nem tud bejelentkezni</p>
-          </div>
-          <input
-            v-model="editForm.isActive"
-            type="checkbox"
-            :disabled="selectedUser.role === Role.BOSS || selectedUser.id === authStore.user?.userId"
-            class="size-4 accent-[#f46714] cursor-pointer"
-          />
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3">
-          <button
-            type="button"
-            @click="isEditModalOpen = false"
-            class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 cursor-pointer"
-          >
-            Mégse
-          </button>
-          <button
-            type="submit"
-            :disabled="actionLoading"
-            class="px-4 py-2 rounded-xl bg-[#171918] text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
-          >
-            {{ actionLoading ? 'Mentés...' : 'Változtatások mentése' }}
-          </button>
-        </div>
-      </form>
-    </Dialog>
-
-    <!-- 6. MODAL: TÖRLÉS MEGERŐSÍTÉSE -->
-    <Dialog
+    <!-- 5. MODAL: TÖRLÉS MEGERŐSÍTÉSE -->
+    <ConfirmDeleteDialog
       v-model:visible="isDeleteConfirmOpen"
-      modal
       header="Felhasználó törlése"
-      class="w-[95vw] max-w-sm !rounded-2xl"
+      confirm-label="Végleges törlés"
+      :loading="actionLoading"
+      @confirm="handleDeleteUser"
     >
-      <div v-if="selectedUser" class="space-y-4 pt-2">
-        <p class="text-sm text-slate-600">
-          Biztosan törölni szeretnéd <b>{{ selectedUser.name }}</b> ({{ selectedUser.email }}) fiókját?
-        </p>
-        <div class="flex justify-end gap-2">
-          <button
-            type="button"
-            @click="isDeleteConfirmOpen = false"
-            class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 cursor-pointer"
-          >
-            Mégse
-          </button>
-          <button
-            type="button"
-            @click="handleDeleteUser"
-            :disabled="actionLoading"
-            class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold cursor-pointer"
-          >
-            {{ actionLoading ? 'Törlés...' : 'Végleges törlés' }}
-          </button>
-        </div>
-      </div>
-    </Dialog>
+      <p v-if="selectedUser" class="text-sm text-slate-600">
+        Biztosan törölni szeretnéd <b>{{ selectedUser.name }}</b> ({{ selectedUser.email }}) fiókját?
+      </p>
+    </ConfirmDeleteDialog>
   </div>
 </template>

@@ -1003,7 +1003,10 @@ onBeforeUnmount(() => {
                 <span class="text-xs font-semibold text-[#171918] truncate">
                   {{ getProductName(variant.productId) }}
                 </span>
-                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#eff1ed] text-[#171918] shrink-0">
+                <span
+                  v-if="variant.size"
+                  class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#eff1ed] text-[#171918] shrink-0"
+                >
                   {{ variant.size }}
                 </span>
                 <span
@@ -1082,7 +1085,10 @@ onBeforeUnmount(() => {
             <span class="text-[11px] font-mono text-[#4c534e] shrink-0">
               {{ selectedVariant.sku }}
             </span>
-            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#eff1ed] text-[#171918] shrink-0">
+            <span
+              v-if="selectedVariant.size"
+              class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#eff1ed] text-[#171918] shrink-0"
+            >
               {{ selectedVariant.size }}
             </span>
           </div>
@@ -1337,8 +1343,10 @@ onBeforeUnmount(() => {
               </p>
               <p class="text-[11px] text-[#4c534e] mt-0.5 truncate">
                 <span class="font-mono font-semibold text-[#171918]">{{ selectedVariant.sku }}</span>
-                <span> · </span>
-                <strong>{{ selectedVariant.size }}</strong>
+                <template v-if="selectedVariant.size">
+                  <span> · </span>
+                  <strong>{{ selectedVariant.size }}</strong>
+                </template>
               </p>
             </div>
           </div>

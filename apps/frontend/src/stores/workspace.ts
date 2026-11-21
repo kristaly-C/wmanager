@@ -10,6 +10,7 @@ export interface NavItem {
   label: string
   icon: string
   to: string
+  disabled?: boolean
 }
 
 export interface WorkspaceConfig {
@@ -31,7 +32,7 @@ export const WORKSPACES: WorkspaceConfig[] = [
       { label: 'Áttekintés', icon: 'pi pi-home', to: '/' },
       { label: 'Készlet & Térkép', icon: 'pi pi-box', to: '/inventory' },
       { label: 'Be- és Kiszállítás', icon: 'pi pi-truck', to: '/shipments' },
-      { label: 'Leltár', icon: 'pi pi-check-square', to: '/stocktakes' },
+      { label: 'Leltár', icon: 'pi pi-check-square', to: '/stocktakes', disabled: true },
     ],
   },
   {
@@ -44,7 +45,8 @@ export const WORKSPACES: WorkspaceConfig[] = [
       { label: 'Katalógus', icon: 'pi pi-tags', to: '/catalog' }, // Később '/catalog' al-fülekkel
       { label: 'Lokációk', icon: 'pi pi-sitemap', to: '/inventory' },
       { label: 'Beszerzés', icon: 'pi pi-shopping-cart', to: '/purchase-orders' },
-      { label: 'Áruszétosztás', icon: 'pi pi-arrows-h', to: '/transfers' },
+      { label: 'Áruszétosztás', icon: 'pi pi-arrows-h', to: '/transfers', disabled: true },
+      { label: 'Elemzések', icon: 'pi pi-chart-bar', to: '/analytics' },
     ],
   },
   {
@@ -54,8 +56,8 @@ export const WORKSPACES: WorkspaceConfig[] = [
     allowedRoles: [Role.ADMIN, Role.BOSS, Role.RMA_CLERK, Role.ORDER_CLERK, Role.STORE_MANAGER, Role.STORE_STAFF],
     navItems: [
       { label: 'Áttekintés', icon: 'pi pi-home', to: '/' },
-      { label: 'Rendelések', icon: 'pi pi-shopping-bag', to: '/orders' },
-      { label: 'Visszáru (RMA)', icon: 'pi pi-replay', to: '/returns' },
+      { label: 'Rendelések', icon: 'pi pi-shopping-bag', to: '/orders', disabled: true },
+      { label: 'Visszáru (RMA)', icon: 'pi pi-replay', to: '/returns', disabled: true },
       { label: 'Készletinfó', icon: 'pi pi-search', to: '/stock-lookup' },
     ],
   },
@@ -66,8 +68,10 @@ export const WORKSPACES: WorkspaceConfig[] = [
     allowedRoles: [Role.ADMIN, Role.BOSS],
     navItems: [
       { label: 'Pénzügy & KPI', icon: 'pi pi-chart-line', to: '/' },
+      { label: 'Elemzések', icon: 'pi pi-chart-bar', to: '/analytics' },
       { label: 'Audit Napló', icon: 'pi pi-history', to: '/movements' },
       { label: 'Felhasználók', icon: 'pi pi-users', to: '/users' },
+      { label: 'Vezérlőpult', icon: 'pi pi-sliders-h', to: '/control-panel' },
     ],
   },
 ]

@@ -309,8 +309,14 @@ onBeforeUnmount(() => {
               <p class="font-semibold text-[#171918]">
                 {{ data.variant.product?.name ?? 'Ismeretlen termék' }}
               </p>
-              <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-[#686f6a] mt-0.5">
-                <span class="bg-[#eff1ed] text-[#171918] font-semibold px-1.5 py-0.5 rounded">
+              <div
+                v-if="data.variant.size || data.variant.colors.length > 0"
+                class="flex flex-wrap items-center gap-1.5 text-[11px] text-[#686f6a] mt-0.5"
+              >
+                <span
+                  v-if="data.variant.size"
+                  class="bg-[#eff1ed] text-[#171918] font-semibold px-1.5 py-0.5 rounded"
+                >
                   {{ data.variant.size }}
                 </span>
                 <span v-if="data.variant.colors.length > 0">

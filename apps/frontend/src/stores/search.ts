@@ -15,17 +15,20 @@ export interface QuickProductInfo {
     productId: string
     name: string
     variantLabel: string
+    size?: string | null
+    colors?: string[]
     sku: string
     barcode: string
-    price: number
+    grossPrice: number
+    netPrice: number
     freeStock: number
     shelf: string
     imageUrl?: string | null
     brandName?: string
     categoryName?: string
     supplierName?: string
-    manufacturerCode?: string
-    model?: string
+    manufacturerCode?: string | null
+    model?: string | null
     material?: string | null
     description?: string | null
     stockBreakdown?: QuickStockBreakdown[]

@@ -1,21 +1,29 @@
-import { LocationType, MovementType, SlotMode, Role, PurchaseOrderStatus, StockTransferStatus, StocktakeStatus, ReturnCaseStatus, SalesOrderStatus, StockReportStatus } from "./enums";
+import { LocationType, MovementType, SlotMode, Role, PurchaseOrderStatus, GoodsReceiptStatus, StockTransferStatus, StocktakeStatus, ReturnCaseStatus, SalesOrderStatus, StockReportStatus } from "./enums";
 
 export interface Product {
     id: string;
     name: string;
     brandId: string;
-    gender: string;
-    usageArea: string;
-    material: string;
-    model: string;
-    manufacturerCode: string;
-    functionality: string;
-    description?: string;
+    gender?: string | null;
+    usageArea?: string | null;
+    material?: string | null;
+    model?: string | null;
+    manufacturerCode?: string | null;
+    functionality?: string | null;
+    description?: string | null;
     vatRate: number;
+
+    unit: string;
+    vtszCode?: string | null;
+    originCountry?: string | null;
+    importantNote?: string | null;
+    season?: string | null;
+    isSerialized: boolean;
+    isPurchasable: boolean;
 
     primarySupplierId: string;
     imageUrls: string[];
-    attributes: Record<string, string>;
+    attributes?: Record<string, string> | null;
 
     categoryId: string;
 
@@ -64,12 +72,18 @@ export interface Variant {
 
     sku: string;
     colors: string[];
-    size: string;
-    weight: number;
+    size?: string | null;
+    weight?: number | null;
+    netWeight?: number | null;
+    volume?: number | null;
     imageUrls: string[];
 
-    price: number;
+    netPrice: number;
+    grossPrice: number;
     costPrice?: number;
+    costCurrency?: string;
+    lastPurchasePrice?: number | null;
+    lastPurchaseAt?: string | null;
 
     isActive: boolean;
     createdAt: string;
@@ -127,24 +141,127 @@ export interface StockMovement {
     variantId: string;
     locationId: string;
     quantity: number;
-    type:MovementType;
+    type: MovementType;
 
-    purchaseOrderId?: string;
-    salesOrderId?: string;
-    stocktakeSessionId?: string;
-    stockTransferId?: string;
-    returnCaseId?: string;
+    purchaseOrderId?: string | null;
+    goodsReceiptId?: string | null;
+    salesOrderId?: string | null;
+    stocktakeSessionId?: string | null;
+    stockTransferId?: string | null;
+    returnCaseId?: string | null;
 
-    note?: string;
+    unitCostHuf?: number | null;
+    unitPriceHuf?: number | null;
+    reversedMovementId?: string | null;
+
+    note?: string | null;
     createdByUserId: string;
     createdAt: string;
 }
 
 export interface PurchaseOrder {
     id: string;
+    orderNumber: string;
     supplierId: string;
     status: PurchaseOrderStatus;
+    currency: string;
+    exchangeRate?: number;
+    supplierReference?: string | null;
+    orderedAt?: string | null;
+    confirmedAt?: string | null;
+    expectedDeliveryDate?: string | null;
+    note?: string | null;
+    createdByUserId?: string | null;
     createdAt: string;
+    updatedAt: string;
+}
+
+export interface PurchaseOrderItem {
+    id: string;
+    purchaseOrderId: string;
+    variantId: string;
+    orderedQuantity: number;
+    confirmedQuantity?: number | null;
+    receivedQuantity: number;
+    unitCost?: number;
+    note?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PurchaseOrderWithItems extends PurchaseOrder {
+    items: PurchaseOrderItem[];
+}
+
+export interface VariantSupplier {
+    id: string;
+    variantId: string;
+    supplierId: string;
+    supplierSku?: string | null;
+    supplierProductName?: string | null;
+    purchasePrice?: number;
+    currency?: string;
+    discountPercent?: number | null;
+    orderUnit?: string | null;
+    isPrimary: boolean;
+    note?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface GoodsReceipt {
+    id: string;
+    receiptNumber: string;
+    purchaseOrderId?: string | null;
+    supplierId?: string | null;
+    targetLocationId: string;
+    invoiceNumber?: string | null;
+    currency?: string;
+    exchangeRate?: number;
+    status: GoodsReceiptStatus;
+    discrepancyNote?: string | null;
+    note?: string | null;
+    createdByUserId: string;
+    approvedByUserId?: string | null;
+    approvedAt?: string | null;
+    completedAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface GoodsReceiptItem {
+    id: string;
+    goodsReceiptId: string;
+    purchaseOrderItemId?: string | null;
+    variantId: string;
+    expectedQuantity: number;
+    receivedQuantity: number;
+    unitCost?: number;
+    unitCostHuf?: number;
+    expectedLocationId?: string | null;
+    isUnexpected: boolean;
+    note?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface GoodsReceiptWithItems extends GoodsReceipt {
+    items: GoodsReceiptItem[];
+}
+
+export interface VariantMonthlyStat {
+    id: string;
+    variantId: string;
+    productId: string;
+    year: number;
+    month: number;
+    purchasedQty: number;
+    purchasedTotalCostHuf: number;
+    soldQty: number;
+    soldRevenueHuf: number;
+    soldCogsHuf: number;
+    returnedQty: number;
+    adjustmentQty: number;
     updatedAt: string;
 }
 

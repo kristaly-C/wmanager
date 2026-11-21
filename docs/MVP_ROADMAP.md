@@ -2,7 +2,7 @@
 
 > Ez a dokumentum az MVP (Minimum Viable Product) fejlesztési sorrendjét és aktuális készültségi állapotát követi nyomon. Minden lezárt részfeladatnál pipáld ki (`[x]`) az adott sort, és frissítsd az „Aktuális fókusz” részt.
 >
-> Utolsó frissítés: 2026-11-16
+> Utolsó frissítés: 2026-11-21
 
 ---
 
@@ -62,6 +62,7 @@
 - [x] `Brand`, `Category`, `Supplier`, `Product`, `Variant`, `VariantBarcode` végpontok
 - [x] Ellenőrzés: a `Product` lista válasz tartalmazza-e a `total` elemszámot a `:lazy="true"` PrimeVue lapozáshoz (ha szükséges, `{ items, total }` bővítés)
 - [x] Variáns színváltozat képek (`Variant.imageUrls` mező, Prisma migráció, DTO validáció, és `bulkCreate` támogatás)
+- [x] ERP-kompatibilis `Product` & `Variant` modellbővítés: opcionális ruházati mezők (`gender`, `model`, `manufacturerCode`, `size`, `weight`, `colors`) az egyszerű termékek támogatásához, alap ERP/NAV mezők (`unit`, `vtszCode`, `originCountry`, `importantNote`, `season`, `isSerialized`, `isPurchasable`, `netWeight`, `volume`), valamint `Variant.price` átállítása `netPrice` + `grossPrice` párra (migrációs SQL + backend DTO/service frissítés)
 
 ### Frontend (`apps/frontend`)
 - [x] Frontend API kliensek létrehozása (`products.ts`, `variants.ts`, `brands.ts`, `suppliers.ts`)
@@ -72,6 +73,7 @@
 - [x] Variánsok CRUD a termékadatlapon (szín, méret, SKU, ár, `costPrice` szerepkör szerinti elrejtésével)
 - [x] Variáns színváltozat képek (`imageUrls`) szerkesztése (`VariantFormModal.vue`), Hero színváltozat galéria + variánstábla miniatűrök (`ProductsTab.vue`), és `GlobalProductSearch.vue` előnézet
 - [x] Vonalkódok kezelése variánsonként (`VariantBarcode` hozzáadása, elsődleges jelölés, törlés)
+- [x] ERP törzsadat és `netPrice`/`grossPrice` kétirányú ÁFA-számítás a `ProductFormModal.vue`, `VariantFormModal.vue`, `ProductsTab.vue` és `GlobalProductSearch.vue` felületeken, egyszerű (méret és szín nélküli) termékek támogatásával
 
 ---
 
@@ -92,8 +94,9 @@
 
 ### 3/B. Bevételezés beérkezett áruhoz (`PurchaseOrder`)
 > **Elkerülhetetlen séma-bővítés:** a `prisma/schema.prisma`-ban a `PurchaseOrder` jelenleg csak fejléc (`supplierId`, `status`), még nincs hozzá `PurchaseOrderItem` tábla és NestJS modul.
+- [ ] **`VariantSupplier` kapcsolótábla és API:** több beszállító per variáns (`supplierSku`, idegen nyelvű `supplierProductName`, devizás beszerzési ár `purchasePrice` + `currency`, beszállítói kedvezmény `%`, rendelési egység `orderUnit`, `isPrimary` jelző)
 - [ ] Prisma séma bővítése: `PurchaseOrderItem` (`purchaseOrderId`, `variantId`, `orderedQuantity`, `receivedQuantity`, opcionális egységár) + szükséges fejlécmezők (pl. bizonylatszám/szállítólevél szám, megjegyzés, célraktár) és migráció
-- [ ] `@wmanager/shared-types` bővítése a `PurchaseOrder` és `PurchaseOrderItem` típusokkal
+- [ ] `@wmanager/shared-types` bővítése a `PurchaseOrder`, `PurchaseOrderItem` és `VariantSupplier` típusokkal
 - [ ] Backend `PurchaseOrderModule` (`GET`, `POST`, `PATCH`, `POST :id/receive` – `$transaction`-ben pozíció(k)ra történő `StockItem` növeléssel és `PURCHASE_RECEIPT` típusú `StockMovement` rögzítéssel)
 - [ ] Frontend Bevételezés nézet (`/purchase-orders` vagy `/shipments` alatt): új bevételezés felvétele, tételek hozzáadása, beérkezett tételek pozícióra rakása és lezárása
 
@@ -114,10 +117,19 @@
 
 ---
 
-## 5. MVP utáni következő körök (Backlog)
+## 5. MVP utáni következő körök (Teljes ERP kiváltás és Backlog)
 
+### Raktár & Operáció bővítések
 - [ ] **Leltár UI (`/stocktakes`):** meglévő backend `StocktakeModule` bekötése a frontendre
 - [ ] **Lokációk közti árumozgatás / transzfer (`StockTransfer`):** backend modul + UI (`/transfers`)
 - [ ] **PDA felület (`/pda`):** Zebra DataWedge vonalkódos gyorsbevételezés, polcra helyezés (putaway), kiszedés és leltár
 - [ ] **Visszáru / RMA (`ReturnCase`):** backend modul + UI (`/returns`)
 - [ ] **Dashboard KPI-k & Webshop szinkron**
+
+### ERP, Számlázás és Könyvelés (régi rendszer teljes kiváltásához)
+- [ ] **Árfolyamok & Speciális árlisták (`CurrencyRate`, `PriceList` / `PriceListItem`):** napi/MNB devizaárfolyamok, aktuális vs. utolsó Ft beszerzési ár számítás, vevői és akciós árlisták, max. kedvezmény% / minimális árrés figyelés
+- [ ] **Vevőtörzs, Számlázás & NAV Online Számla (`Customer`, `Invoice` / `InvoiceItem`):** adószám, számlázási/szállítási cím, sztornó/jóváíró számlák, NAV XML adatszolgáltatás
+- [ ] **Könyvelési & EPR adatok (`ProductAccounting`):** főkönyvi számlaszámok, termékdíj / EPR csomagolóanyag-kezelés, vámkezelési díj / fuvar / statisztikai illeték / paritás
+- [ ] **Gyáriszám-követés (`SerialNumber`):** `Product.isSerialized` termékeknél egyedi gyáriszámok rögzítése bevételezéskor és kiadáskor
+- [ ] **Csomagtermékek / Receptúrák (`ProductBundle` / BOM):** összetett termékek és szerelési/csomag-receptek kezelése
+- [ ] **Módosítási napló (`AuditLog`):** törzsadat-, ár- és jogosultságváltozások visszakövethető naplózása

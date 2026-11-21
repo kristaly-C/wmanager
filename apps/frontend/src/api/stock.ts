@@ -9,9 +9,12 @@ export interface StockVariantInfo {
   productId: string
   sku: string
   colors: string[]
-  size: string
-  weight: number | string
-  price: number | string
+  size?: string | null
+  weight?: number | string | null
+  netWeight?: number | string | null
+  volume?: number | string | null
+  netPrice: number | string
+  grossPrice: number | string
   costPrice?: number | string
   isActive: boolean
   product?: ProductListItem

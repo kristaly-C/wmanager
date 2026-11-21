@@ -1,23 +1,30 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { MovementType, Role } from '@wmanager/shared-types'
+import { useRouter } from 'vue-router'
+import { Role } from '@wmanager/shared-types'
 import { useAuthStore } from '@/stores/auth'
 import { productApi, type ProductListItem } from '@/api/products'
-import { variantApi, type VariantBarcodeItem, type VariantItem } from '@/api/variants'
+import { variantApi, type VariantItem } from '@/api/variants'
 import { brandApi, type BrandItem } from '@/api/brands'
 import { categoryApi, type Category } from '@/api/categories'
 import { supplierApi, type SupplierItem } from '@/api/suppliers'
 import { locationApi, type LocationItem } from '@/api/locations'
 import { stockApi, type StockItemEntry, type StockMovementEntry } from '@/api/stock'
-import { extractApiError, getLocationPath, LOCATION_TYPE_META } from '@/utils/locationMeta'
+import { extractApiError } from '@/utils/locationMeta'
+import { canSeeCostPrice as hasCostPriceAccess } from '@/utils/procurementMeta'
+import ProductListSidebar from './ProductListSidebar.vue'
+import ProductVariantsSection from './ProductVariantsSection.vue'
+import ProductStockSection from './ProductStockSection.vue'
 import ProductFormModal from './ProductFormModal.vue'
 import VariantFormModal from './VariantFormModal.vue'
 import VariantBarcodesModal from './VariantBarcodesModal.vue'
+import VariantSuppliersModal from './VariantSuppliersModal.vue'
 import StockAdjustModal from '@/components/inventory/StockAdjustModal.vue'
 import StockReportModal from '@/components/inventory/StockReportModal.vue'
-import Dialog from 'primevue/dialog'
+import ConfirmDeleteDialog from '@/components/common/ConfirmDeleteDialog.vue'
 import { useToast } from 'primevue/usetoast'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
 
@@ -39,17 +46,10 @@ const canAdjustStock = computed(() => {
   )
 })
 
-const COST_PRICE_ROLES: Role[] = [
-  Role.BOSS,
-  Role.ADMIN,
-  Role.WAREHOUSE_MANAGER,
-  Role.STORE_MANAGER,
-  Role.ORDER_CLERK,
-]
+const canReportStock = computed(() => canAdjustStock.value)
 
 const canSeeCostPrice = computed(() => {
-  const role = authStore.user?.role
-  if (!role || !COST_PRICE_ROLES.includes(role)) return false
+  if (!hasCostPriceAccess(authStore.user?.role)) return false
   if (variants.value.length > 0 && variants.value.every((v) => v.costPrice === undefined)) {
     return false
   }
@@ -122,6 +122,10 @@ const deletingVariant = ref(false)
 const isBarcodesModalOpen = ref(false)
 const barcodeModalVariant = ref<VariantItem | null>(null)
 
+// Modal állapotok – Variáns beszállítók
+const isSuppliersModalOpen = ref(false)
+const suppliersModalVariant = ref<VariantItem | null>(null)
+
 const selectedProduct = computed(
   () => products.value.find((p) => p.id === selectedProductId.value) ?? null,
 )
@@ -167,10 +171,6 @@ const activeHeroImage = computed<string | null>(() => {
   )
 })
 
-function getVariantThumbnail(variant: VariantItem): string | null {
-  return variant.imageUrls?.[0] || selectedProduct.value?.imageUrls?.[0] || null
-}
-
 const totalPages = computed(() => Math.max(1, Math.ceil(totalProducts.value / pageSize)))
 
 const paginationRangeText = computed(() => {
@@ -179,6 +179,10 @@ const paginationRangeText = computed(() => {
   const end = Math.min(currentPage.value * pageSize, totalProducts.value)
   return `${start}–${end} / ${totalProducts.value} termék`
 })
+
+const hasActiveFilters = computed(() =>
+  Boolean(debouncedSearch.value || categoryFilter.value || brandFilter.value),
+)
 
 const sortedBrands = computed(() =>
   [...brands.value].sort((a, b) => a.name.localeCompare(b.name, 'hu')),
@@ -203,13 +207,10 @@ const sortedCategories = computed(() =>
   categories.value
     .map((c) => ({
       id: c.id,
-      name: c.name,
       label: formatCategoryPath(c.id, c.name),
     }))
     .sort((a, b) => a.label.localeCompare(b.label, 'hu')),
 )
-
-const locationById = computed(() => new Map(locations.value.map((l) => [l.id, l])))
 
 const freeStockByVariantId = computed(() => {
   const map = new Map<string, number>()
@@ -220,58 +221,9 @@ const freeStockByVariantId = computed(() => {
   return map
 })
 
-function getVariantFreeStock(variantId: string): number {
-  return freeStockByVariantId.value.get(variantId) ?? 0
-}
-
-const visibleStockItems = computed(() =>
-  stockItems.value.filter((item) => item.quantity > 0 || item.reservedQuantity > 0),
+const totalFreeQty = computed(() =>
+  stockItems.value.reduce((sum, item) => sum + (item.quantity - item.reservedQuantity), 0),
 )
-
-const totalStockQty = computed(() =>
-  stockItems.value.reduce((sum, item) => sum + item.quantity, 0),
-)
-
-const totalReservedQty = computed(() =>
-  stockItems.value.reduce((sum, item) => sum + item.reservedQuantity, 0),
-)
-
-const totalFreeQty = computed(() => totalStockQty.value - totalReservedQty.value)
-
-const MOVEMENT_TYPE_META: Record<MovementType, { label: string; badgeClass: string }> = {
-  [MovementType.INITIAL_STOCK]: {
-    label: 'Kezdeti felvitel',
-    badgeClass: 'bg-blue-50 text-blue-700 border border-blue-200',
-  },
-  [MovementType.PURCHASE_RECEIPT]: {
-    label: 'Bevételezés',
-    badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  },
-  [MovementType.SALE]: {
-    label: 'Eladás',
-    badgeClass: 'bg-orange-50 text-orange-700 border border-orange-200',
-  },
-  [MovementType.TRANSFER_OUT]: {
-    label: 'Átmozgatás ki',
-    badgeClass: 'bg-amber-50 text-amber-700 border border-amber-200',
-  },
-  [MovementType.TRANSFER_IN]: {
-    label: 'Átmozgatás be',
-    badgeClass: 'bg-teal-50 text-teal-700 border border-teal-200',
-  },
-  [MovementType.STOCKTAKE_ADJUSTMENT]: {
-    label: 'Leltárkorrekció',
-    badgeClass: 'bg-purple-50 text-purple-700 border border-purple-200',
-  },
-  [MovementType.RETURN_RESTOCK]: {
-    label: 'Visszáru készletre',
-    badgeClass: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
-  },
-  [MovementType.MANUAL_CORRECTION]: {
-    label: 'Kézi korrekció',
-    badgeClass: 'bg-slate-100 text-slate-700 border border-slate-200',
-  },
-}
 
 function isCanceledError(err: unknown): boolean {
   const e = err as { code?: string; name?: string }
@@ -363,6 +315,12 @@ async function loadVariants(productId: string) {
       const updated = res.data.find((v) => v.id === barcodeModalVariant.value?.id)
       if (updated) {
         barcodeModalVariant.value = updated
+      }
+    }
+    if (suppliersModalVariant.value) {
+      const updated = res.data.find((v) => v.id === suppliersModalVariant.value?.id)
+      if (updated) {
+        suppliersModalVariant.value = updated
       }
     }
   } catch (err) {
@@ -589,6 +547,21 @@ async function onBarcodesUpdated() {
   await loadVariants(selectedProduct.value.id)
 }
 
+// Beszállítók modal és ártörténet navigáció
+function openSuppliersModal(variant: VariantItem) {
+  suppliersModalVariant.value = variant
+  isSuppliersModalOpen.value = true
+}
+
+function openVariantAnalytics(variant: VariantItem) {
+  void router.push({ path: '/analytics', query: { variantId: variant.id } })
+}
+
+async function onSuppliersUpdated() {
+  if (!selectedProduct.value) return
+  await loadVariants(selectedProduct.value.id)
+}
+
 // Gyors készletfelvitel / korrekció modal
 function openStockAdjustModal(locationId: string | null = null, variantId: string | null = null) {
   adjustInitialLocationId.value = locationId
@@ -609,49 +582,6 @@ async function onStockAdjusted() {
   await loadProductStock(selectedProduct.value.id)
 }
 
-function getPrimaryBarcode(variant: VariantItem): VariantBarcodeItem | undefined {
-  const list = variant.variantBarcodes ?? []
-  return list.find((b) => b.isPrimary) ?? list[0]
-}
-
-function formatLocationBreadcrumb(location: LocationItem): string {
-  const path = getLocationPath(location.id, locationById.value)
-  if (path.length > 0) {
-    return path.map((loc) => loc.name).join(' › ')
-  }
-  return location.name
-}
-
-function formatMovementDate(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString('hu-HU', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatSignedQuantity(qty: number): string {
-  return qty > 0 ? `+${qty} db` : `${qty} db`
-}
-
-function formatPrice(val: number | string | undefined): string {
-  if (val === undefined || val === null) return '—'
-  const num = Number(val)
-  if (Number.isNaN(num)) return String(val)
-  return `${num.toLocaleString('hu-HU')} Ft`
-}
-
-function formatWeight(val: number | string | undefined): string {
-  if (val === undefined || val === null) return '—'
-  const num = Number(val)
-  if (Number.isNaN(num)) return String(val)
-  return `${num.toLocaleString('hu-HU')} kg`
-}
-
 onMounted(async () => {
   await Promise.all([loadLookups(), loadProducts()])
 })
@@ -666,152 +596,28 @@ onBeforeUnmount(() => {
 <template>
   <!-- OSZTOTT NÉZET (Master-Detail Grid: Bal 4 oszlop, Jobb 8 oszlop) -->
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-    <!-- 1. BAL OLDALI KÁRTYA: Kereső + Szűrők + Új gomb + Szerveroldali Terméklista + Lapozó -->
-    <div
-      class="lg:col-span-4 bg-white rounded-3xl border border-white shadow-sm p-4 flex flex-col h-[calc(100vh-190px)] min-h-[560px]"
-    >
-      <!-- Kereső + Új termék gomb -->
-      <div class="flex items-center gap-2 mb-2.5">
-        <div class="relative flex-1">
-          <i
-            class="pi pi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"
-          ></i>
-          <input
-            v-model="searchInput"
-            type="text"
-            placeholder="Név, kód, SKU vagy vonalkód..."
-            @keydown.enter.prevent="triggerImmediateSearch"
-            class="w-full bg-slate-100/80 rounded-xl py-2 pl-9 pr-3 text-sm text-slate-800 placeholder-slate-400 outline-none focus:ring-2 focus:ring-orange-500/20"
-          />
-        </div>
-        <button
-          v-if="canManageCatalog"
-          type="button"
-          @click="openCreateProduct"
-          class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shrink-0 cursor-pointer transition shadow-sm"
-        >
-          <i class="pi pi-plus text-xs"></i>
-          <span>Új termék</span>
-        </button>
-      </div>
-
-      <!-- Kategória és Márka szűrők -->
-      <div class="grid grid-cols-2 gap-2 mb-3">
-        <select
-          v-model="categoryFilter"
-          class="h-8 rounded-xl bg-slate-100/80 px-2.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-orange-500/20"
-        >
-          <option value="">Minden kategória</option>
-          <option v-for="c in sortedCategories" :key="c.id" :value="c.id">
-            {{ c.label }}
-          </option>
-        </select>
-
-        <select
-          v-model="brandFilter"
-          class="h-8 rounded-xl bg-slate-100/80 px-2.5 text-xs text-slate-700 outline-none focus:ring-2 focus:ring-orange-500/20"
-        >
-          <option value="">Minden márka</option>
-          <option v-for="b in sortedBrands" :key="b.id" :value="b.id">
-            {{ b.name }}
-          </option>
-        </select>
-      </div>
-
-      <!-- Görgethető terméklista -->
-      <div class="flex-1 overflow-y-auto space-y-1.5 pr-1">
-        <div
-          v-if="loadingProducts && products.length === 0"
-          class="py-12 text-center text-xs text-slate-400"
-        >
-          <i class="pi pi-spin pi-spinner mr-1.5"></i> Termékek betöltése...
-        </div>
-
-        <div
-          v-else-if="products.length === 0"
-          class="py-10 px-4 text-center space-y-2 text-xs text-slate-400"
-        >
-          <i class="pi pi-inbox text-2xl block text-slate-300"></i>
-          <p>Nincs a szűrésnek megfelelő termék.</p>
-          <button
-            v-if="debouncedSearch || categoryFilter || brandFilter"
-            type="button"
-            @click="resetFilters"
-            class="text-orange-600 hover:underline font-semibold cursor-pointer"
-          >
-            Szűrők törlése
-          </button>
-        </div>
-
-        <div
-          v-else
-          v-for="product in products"
-          :key="product.id"
-          @click="selectedProductId = product.id"
-          class="p-3 rounded-2xl flex items-center justify-between gap-3 cursor-pointer transition-all border"
-          :class="
-            selectedProductId === product.id
-              ? 'bg-orange-50/60 border-orange-300 shadow-xs'
-              : 'bg-transparent border-transparent hover:bg-slate-50'
-          "
-        >
-          <div class="flex items-center gap-3 min-w-0">
-            <div
-              class="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 overflow-hidden"
-            >
-              <img
-                v-if="product.imageUrls?.[0]"
-                :src="product.imageUrls[0]"
-                :alt="product.name"
-                class="w-full h-full object-cover"
-              />
-              <i v-else class="pi pi-box text-lg"></i>
-            </div>
-            <div class="min-w-0">
-              <p class="font-bold text-sm text-slate-900 truncate">{{ product.name }}</p>
-              <p class="text-xs text-slate-400 truncate">
-                {{ product.brand?.name ?? '—' }} ·
-                <span class="font-mono">{{ product.manufacturerCode }}</span>
-              </p>
-            </div>
-          </div>
-
-          <span
-            class="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 shrink-0"
-          >
-            {{ product._count?.variants ?? 0 }} variáns
-          </span>
-        </div>
-      </div>
-
-      <!-- Alsó lapozó (Paginator) -->
-      <div
-        class="pt-3 mt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500"
-      >
-        <span>{{ paginationRangeText }}</span>
-        <div class="flex items-center gap-1.5">
-          <button
-            type="button"
-            :disabled="currentPage <= 1 || loadingProducts"
-            @click="goToPage(currentPage - 1)"
-            class="h-7 px-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 text-slate-700 font-semibold cursor-pointer transition"
-          >
-            Előző
-          </button>
-          <span class="px-1.5 font-semibold text-slate-700">
-            {{ currentPage }} / {{ totalPages }}
-          </span>
-          <button
-            type="button"
-            :disabled="currentPage >= totalPages || loadingProducts"
-            @click="goToPage(currentPage + 1)"
-            class="h-7 px-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 text-slate-700 font-semibold cursor-pointer transition"
-          >
-            Következő
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- 1. BAL OLDALI KÁRTYA -->
+    <ProductListSidebar
+      v-model:search-input="searchInput"
+      v-model:category-filter="categoryFilter"
+      v-model:brand-filter="brandFilter"
+      :products="products"
+      :total-products="totalProducts"
+      :loading="loadingProducts"
+      :selected-product-id="selectedProductId"
+      :categories="sortedCategories"
+      :brands="sortedBrands"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      :pagination-range-text="paginationRangeText"
+      :can-manage-catalog="canManageCatalog"
+      :has-active-filters="hasActiveFilters"
+      @select-product="selectedProductId = $event"
+      @page-change="goToPage"
+      @immediate-search="triggerImmediateSearch"
+      @reset-filters="resetFilters"
+      @create-product="openCreateProduct"
+    />
 
     <!-- 2. JOBB OLDALI KÁRTYA: A kiválasztott termék szellős adatlapja -->
     <div
@@ -820,7 +626,7 @@ onBeforeUnmount(() => {
     >
       <!-- Felső fejléc: Terméknév + Státusz + Szerkesztés / Törlés gombok -->
       <div class="flex flex-wrap items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2.5">
           <h1 class="text-2xl font-bold text-slate-900">{{ selectedProduct.name }}</h1>
           <span
             class="text-xs font-bold px-2.5 py-1 rounded-full"
@@ -831,6 +637,12 @@ onBeforeUnmount(() => {
             "
           >
             {{ selectedProduct.isActive ? 'Aktív' : 'Inaktív' }}
+          </span>
+          <span
+            v-if="selectedProduct.isPurchasable === false"
+            class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200"
+          >
+            Nem vásárolható
           </span>
         </div>
 
@@ -851,6 +663,20 @@ onBeforeUnmount(() => {
           >
             <i class="pi pi-trash text-xs"></i>
           </button>
+        </div>
+      </div>
+
+      <!-- Kiemelt figyelmeztetés (Fontos) -->
+      <div
+        v-if="selectedProduct.importantNote"
+        class="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-900"
+      >
+        <i class="pi pi-exclamation-triangle text-amber-600 text-sm mt-0.5 shrink-0"></i>
+        <div>
+          <span class="font-bold uppercase tracking-wider text-[10px] text-amber-700 block">
+            Fontos megjegyzés
+          </span>
+          <p class="font-medium mt-0.5 whitespace-pre-line">{{ selectedProduct.importantNote }}</p>
         </div>
       </div>
 
@@ -935,7 +761,7 @@ onBeforeUnmount(() => {
               Gyártói kód
             </span>
             <span class="text-base font-bold font-mono text-slate-900 mt-0.5 block">
-              {{ selectedProduct.manufacturerCode }}
+              {{ selectedProduct.manufacturerCode || '—' }}
             </span>
           </div>
           <div class="p-3.5 rounded-2xl bg-slate-50/80">
@@ -1009,11 +835,40 @@ onBeforeUnmount(() => {
         </div>
         <div>
           <span class="text-xs text-slate-400 block">Modell</span>
-          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.model }}</span>
+          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.model || '—' }}</span>
         </div>
         <div>
           <span class="text-xs text-slate-400 block">Nem</span>
-          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.gender }}</span>
+          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.gender || '—' }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">Mennyiségi egység</span>
+          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.unit || 'DB' }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">VTSZ kód</span>
+          <span class="text-sm font-mono font-semibold text-slate-800">
+            {{ selectedProduct.vtszCode || '—' }}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">Származási ország</span>
+          <span class="text-sm font-mono font-semibold text-slate-800">
+            {{ selectedProduct.originCountry || '—' }}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">Szezon</span>
+          <span class="text-sm font-semibold text-slate-800">
+            {{ selectedProduct.season || '—' }}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">Vásárolható / Gyáriszámos</span>
+          <span class="text-sm font-semibold text-slate-800">
+            {{ selectedProduct.isPurchasable === false ? 'Nem vásárolható' : 'Vásárolható' }} ·
+            {{ selectedProduct.isSerialized ? 'Gyáriszámos' : 'Nem gyáriszámos' }}
+          </span>
         </div>
         <div>
           <span class="text-xs text-slate-400 block">Anyagösszetétel</span>
@@ -1027,7 +882,7 @@ onBeforeUnmount(() => {
             {{ selectedProduct.usageArea || '—' }}
           </span>
         </div>
-        <div>
+        <div class="sm:col-span-2">
           <span class="text-xs text-slate-400 block">Funkcionalitás / Jellemzők</span>
           <span class="text-sm font-semibold text-slate-800">
             {{ selectedProduct.functionality || '—' }}
@@ -1046,427 +901,38 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- FÜL 2: VARIÁNSOK & ÁRAK -->
-      <div v-else-if="activeDetailTab === 'variants'" class="space-y-3">
-        <div v-if="canManageCatalog" class="flex justify-end">
-          <button
-            type="button"
-            @click="openCreateVariant"
-            class="text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer"
-          >
-            <i class="pi pi-plus text-[10px]"></i>
-            <span>Új variáns hozzáadása</span>
-          </button>
-        </div>
-
-        <div v-if="loadingVariants" class="py-8 text-center text-xs text-slate-400">
-          <i class="pi pi-spin pi-spinner mr-1.5"></i> Variánsok betöltése...
-        </div>
-
-        <div
-          v-else-if="variants.length === 0"
-          class="py-8 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-400"
-        >
-          Ehhez a termékhez még nem tartozik variáns.
-        </div>
-
-        <div v-else class="overflow-x-auto">
-          <table class="w-full text-left border-collapse">
-            <thead>
-              <tr
-                class="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100"
-              >
-                <th class="pb-3 pr-3">Méret</th>
-                <th class="pb-3 pr-3">Cikkszám (SKU)</th>
-                <th class="pb-3 pr-3">Színek</th>
-                <th class="pb-3 pr-3 text-right">Súly</th>
-                <th v-if="canSeeCostPrice" class="pb-3 pr-3 text-right">Beszerzési ár</th>
-                <th class="pb-3 pr-3 text-right">Eladási ár</th>
-                <th class="pb-3 pr-3">Vonalkódok</th>
-                <th class="pb-3 pr-3 text-right">Szabad készlet</th>
-                <th class="pb-3 pr-3 text-center">Állapot</th>
-                <th v-if="canManageCatalog || canAdjustStock" class="pb-3 text-right">
-                  Műveletek
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 text-sm">
-              <tr v-for="v in variants" :key="v.id" class="hover:bg-slate-50/70 transition">
-                <td class="py-3.5 pr-3 font-bold text-slate-900">{{ v.size }}</td>
-                <td class="py-3.5 pr-3 font-mono text-xs text-slate-600">{{ v.sku }}</td>
-                <td class="py-3.5 pr-3 text-slate-700">
-                  <div class="flex items-center gap-2.5">
-                    <button
-                      v-if="getVariantThumbnail(v)"
-                      type="button"
-                      @click="selectedHeroImage = getVariantThumbnail(v)"
-                      :title="`Kép megtekintése: ${v.colors.join(', ') || v.sku}`"
-                      class="shrink-0 cursor-pointer rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/40"
-                    >
-                      <img
-                        :src="getVariantThumbnail(v)!"
-                        :alt="v.colors.join(', ') || v.sku"
-                        class="w-9 h-9 rounded-lg aspect-square object-contain bg-white border border-slate-200 hover:border-orange-400 transition"
-                      />
-                    </button>
-                    <span>{{ v.colors.join(', ') }}</span>
-                  </div>
-                </td>
-                <td class="py-3.5 pr-3 text-right text-slate-500 text-xs">
-                  {{ formatWeight(v.weight) }}
-                </td>
-                <td
-                  v-if="canSeeCostPrice"
-                  class="py-3.5 pr-3 text-right text-slate-500 whitespace-nowrap"
-                >
-                  {{ formatPrice(v.costPrice) }}
-                </td>
-                <td class="py-3.5 pr-3 text-right font-bold text-slate-900 whitespace-nowrap">
-                  {{ formatPrice(v.price) }}
-                </td>
-                <td class="py-3.5 pr-3">
-                  <button
-                    type="button"
-                    @click="openBarcodesModal(v)"
-                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-orange-50 text-xs font-semibold text-slate-700 hover:text-orange-700 cursor-pointer transition"
-                    title="Vonalkódok kezelése"
-                  >
-                    <i class="pi pi-barcode text-xs"></i>
-                    <span v-if="getPrimaryBarcode(v)" class="font-mono">
-                      {{ getPrimaryBarcode(v)?.barcode }}
-                    </span>
-                    <span v-else class="text-slate-400">Nincs</span>
-                    <span
-                      class="px-1.5 py-0.2 rounded bg-white text-[10px] font-bold text-slate-600"
-                    >
-                      {{ v.variantBarcodes?.length ?? 0 }}
-                    </span>
-                  </button>
-                </td>
-                <td class="py-3.5 pr-3 text-right whitespace-nowrap">
-                  <span
-                    class="inline-flex items-center text-[11px] font-bold px-2.5 py-0.5 rounded-full"
-                    :class="
-                      getVariantFreeStock(v.id) > 0
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-slate-100 text-slate-500'
-                    "
-                  >
-                    {{ getVariantFreeStock(v.id) }} db szabad
-                  </span>
-                </td>
-                <td class="py-3.5 pr-3 text-center">
-                  <span
-                    class="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full"
-                    :class="
-                      v.isActive
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-slate-100 text-slate-500'
-                    "
-                  >
-                    {{ v.isActive ? 'Aktív' : 'Inaktív' }}
-                  </span>
-                </td>
-                <td
-                  v-if="canManageCatalog || canAdjustStock"
-                  class="py-3.5 text-right whitespace-nowrap"
-                >
-                  <div class="inline-flex items-center gap-1">
-                    <button
-                      v-if="canAdjustStock"
-                      type="button"
-                      @click="openStockAdjustModal(null, v.id)"
-                      class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-emerald-50 hover:border-emerald-200 text-slate-600 hover:text-emerald-700 flex items-center justify-center cursor-pointer transition"
-                      title="Gyors készletfelvitel / korrekció"
-                    >
-                      <i class="pi pi-box text-[11px]"></i>
-                    </button>
-                    <template v-if="canManageCatalog">
-                      <button
-                        type="button"
-                        @click="openCloneVariant(v)"
-                        class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-orange-50 hover:border-orange-200 text-slate-600 hover:text-orange-600 flex items-center justify-center cursor-pointer transition"
-                        title="Klónozás / Új méretsor ebből"
-                      >
-                        <i class="pi pi-copy text-[11px]"></i>
-                      </button>
-                      <button
-                        type="button"
-                        @click="openEditVariant(v)"
-                        class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 flex items-center justify-center cursor-pointer transition"
-                        title="Variáns szerkesztése"
-                      >
-                        <i class="pi pi-pencil text-[11px]"></i>
-                      </button>
-                      <button
-                        type="button"
-                        @click="promptDeleteVariant(v)"
-                        class="w-7 h-7 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-600 flex items-center justify-center cursor-pointer transition"
-                        title="Variáns törlése"
-                      >
-                        <i class="pi pi-trash text-[11px]"></i>
-                      </button>
-                    </template>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <ProductVariantsSection
+        v-else-if="activeDetailTab === 'variants'"
+        :variants="variants"
+        :loading="loadingVariants"
+        :product-image-urls="selectedProduct.imageUrls"
+        :can-manage-catalog="canManageCatalog"
+        :can-adjust-stock="canAdjustStock"
+        :can-see-cost-price="canSeeCostPrice"
+        :free-stock-by-variant-id="freeStockByVariantId"
+        @create-variant="openCreateVariant"
+        @clone-variant="openCloneVariant"
+        @edit-variant="openEditVariant"
+        @delete-variant="promptDeleteVariant"
+        @open-barcodes="openBarcodesModal"
+        @manage-suppliers="openSuppliersModal"
+        @open-analytics="openVariantAnalytics"
+        @adjust-stock="openStockAdjustModal(null, $event)"
+        @select-hero-image="selectedHeroImage = $event"
+      />
 
       <!-- FÜL 3: KÉSZLET & MOZGÁSOK -->
-      <div v-else class="space-y-6">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <p class="text-xs text-slate-500">
-            A termék aktuális készlete tárhelyek szerint és az utolsó 15 készletmozgás.
-          </p>
-          <button
-            v-if="canAdjustStock"
-            type="button"
-            @click="openStockAdjustModal(null, null)"
-            class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-sm"
-          >
-            <i class="pi pi-plus text-[11px]"></i>
-            <span>Készlet felvitele / korrekció</span>
-          </button>
-        </div>
-
-        <div
-          v-if="loadingStock && stockItems.length === 0 && stockMovements.length === 0"
-          class="py-10 text-center text-xs text-slate-400"
-        >
-          <i class="pi pi-spin pi-spinner mr-1.5"></i> Készletadatok betöltése...
-        </div>
-
-        <template v-else>
-          <!-- 3 Összesítő mini-kártya -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div class="p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
-              <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Összes készlet
-              </span>
-              <span class="text-xl font-bold text-slate-900 mt-1 block">
-                {{ totalStockQty.toLocaleString('hu-HU') }} db
-              </span>
-            </div>
-            <div class="p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
-              <span class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Foglalt készlet
-              </span>
-              <span class="text-xl font-bold text-amber-700 mt-1 block">
-                {{ totalReservedQty.toLocaleString('hu-HU') }} db
-              </span>
-            </div>
-            <div class="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100">
-              <span class="block text-[11px] font-bold uppercase tracking-wider text-emerald-700">
-                Elérhető (szabad)
-              </span>
-              <span
-                class="text-xl font-bold mt-1 block"
-                :class="totalFreeQty > 0 ? 'text-emerald-700' : 'text-slate-600'"
-              >
-                {{ totalFreeQty.toLocaleString('hu-HU') }} db
-              </span>
-            </div>
-          </div>
-
-          <!-- Pozíció szerinti készlet táblázat -->
-          <div class="space-y-3">
-            <div class="flex items-center justify-between">
-              <h3 class="text-sm font-bold text-slate-900">Pozíció szerinti készlet</h3>
-              <span class="text-xs font-semibold text-slate-400">
-                {{ visibleStockItems.length }} pozíció
-              </span>
-            </div>
-
-            <div
-              v-if="visibleStockItems.length === 0"
-              class="py-8 px-4 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 space-y-2"
-            >
-              <i class="pi pi-inbox text-2xl text-slate-300 block"></i>
-              <p class="text-xs text-slate-500">
-                Ennek a terméknek jelenleg minden pozíción 0 db a készlete.
-              </p>
-              <button
-                v-if="canAdjustStock"
-                type="button"
-                @click="openStockAdjustModal(null, null)"
-                class="text-xs font-semibold text-orange-600 hover:underline cursor-pointer"
-              >
-                + Kezdeti készlet felvitele
-              </button>
-            </div>
-
-            <div v-else class="overflow-x-auto">
-              <table class="w-full text-left border-collapse">
-                <thead>
-                  <tr
-                    class="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100"
-                  >
-                    <th class="pb-3 pr-3">Pozíció</th>
-                    <th class="pb-3 pr-3">Variáns</th>
-                    <th class="pb-3 pr-3 text-right">Összes</th>
-                    <th class="pb-3 pr-3 text-right">Foglalt</th>
-                    <th class="pb-3 pr-3 text-right">Elérhető</th>
-                    <th v-if="canAdjustStock" class="pb-3 text-right">Művelet</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 text-sm">
-                  <tr
-                    v-for="item in visibleStockItems"
-                    :key="item.id"
-                    class="hover:bg-slate-50/70 transition"
-                  >
-                    <td class="py-3 pr-3">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="font-semibold text-slate-800 text-xs">
-                          {{ formatLocationBreadcrumb(item.location) }}
-                        </span>
-                        <span
-                          class="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                          :class="LOCATION_TYPE_META[item.location.type].badgeClass"
-                        >
-                          {{ LOCATION_TYPE_META[item.location.type].label }}
-                        </span>
-                        <span
-                          v-if="item.isExternalLocation"
-                          class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200"
-                        >
-                          Másik telephely (összesített)
-                        </span>
-                      </div>
-                    </td>
-                    <td class="py-3 pr-3 text-xs text-slate-700">
-                      <span class="font-bold text-slate-900">{{ item.variant.size }}</span>
-                      <span class="text-slate-400 mx-1">·</span>
-                      <span>{{ item.variant.colors.join(', ') }}</span>
-                      <span class="text-slate-400 mx-1">·</span>
-                      <span class="font-mono text-slate-500">{{ item.variant.sku }}</span>
-                    </td>
-                    <td class="py-3 pr-3 text-right font-semibold text-slate-800 whitespace-nowrap">
-                      {{ item.quantity }} db
-                    </td>
-                    <td class="py-3 pr-3 text-right text-amber-700 whitespace-nowrap">
-                      {{ item.reservedQuantity }} db
-                    </td>
-                    <td class="py-3 pr-3 text-right whitespace-nowrap">
-                      <span
-                        class="inline-block text-xs font-bold px-2 py-0.5 rounded-full"
-                        :class="
-                          item.quantity - item.reservedQuantity > 0
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-rose-50 text-rose-600'
-                        "
-                      >
-                        {{ item.quantity - item.reservedQuantity }} db
-                      </span>
-                    </td>
-                    <td v-if="canAdjustStock" class="py-3 text-right whitespace-nowrap">
-                      <div v-if="!item.isExternalLocation" class="inline-flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          @click="openStockAdjustModal(item.locationId, item.variantId)"
-                          class="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 cursor-pointer transition"
-                        >
-                          Áthelyezés / Korrekció
-                        </button>
-                        <button
-                          type="button"
-                          @click="openStockReportModal(item.locationId, item.variantId, item.quantity)"
-                          class="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50/70 hover:bg-amber-100 text-[11px] font-semibold text-amber-800 inline-flex items-center gap-1 cursor-pointer transition"
-                          title="Hiány / eltérés jelentése ezen a pozíción"
-                        >
-                          <i class="pi pi-exclamation-triangle text-[10px]"></i>
-                          <span>Hiány jelentése</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Legutóbbi készletmozgások -->
-          <div class="space-y-3 pt-2 border-t border-slate-100">
-            <div class="flex items-center justify-between">
-              <h3 class="text-sm font-bold text-slate-900">Legutóbbi készletmozgások</h3>
-              <span class="text-xs font-semibold text-slate-400">
-                Utolsó {{ stockMovements.length }} mozgás
-              </span>
-            </div>
-
-            <div
-              v-if="stockMovements.length === 0"
-              class="py-6 px-4 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-400"
-            >
-              Még nincs rögzített készletmozgás ehhez a termékhez.
-            </div>
-
-            <div v-else class="overflow-x-auto">
-              <table class="w-full text-left border-collapse">
-                <thead>
-                  <tr
-                    class="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100"
-                  >
-                    <th class="pb-3 pr-3">Időpont</th>
-                    <th class="pb-3 pr-3">Típus</th>
-                    <th class="pb-3 pr-3">Variáns</th>
-                    <th class="pb-3 pr-3">Pozíció</th>
-                    <th class="pb-3 pr-3 text-right">Mennyiség</th>
-                    <th class="pb-3 pr-3">Rögzítette</th>
-                    <th class="pb-3">Megjegyzés</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 text-xs">
-                  <tr
-                    v-for="m in stockMovements"
-                    :key="m.id"
-                    class="hover:bg-slate-50/70 transition"
-                  >
-                    <td class="py-3 pr-3 text-slate-500 whitespace-nowrap">
-                      {{ formatMovementDate(m.createdAt) }}
-                    </td>
-                    <td class="py-3 pr-3 whitespace-nowrap">
-                      <span
-                        class="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full"
-                        :class="MOVEMENT_TYPE_META[m.type].badgeClass"
-                      >
-                        {{ MOVEMENT_TYPE_META[m.type].label }}
-                      </span>
-                    </td>
-                    <td class="py-3 pr-3 whitespace-nowrap">
-                      <span class="font-mono text-slate-700">{{ m.variant.sku }}</span>
-                      <span class="text-slate-400 ml-1">({{ m.variant.size }})</span>
-                    </td>
-                    <td class="py-3 pr-3 text-slate-700">
-                      {{ m.location.name }}
-                    </td>
-                    <td
-                      class="py-3 pr-3 text-right font-bold whitespace-nowrap"
-                      :class="
-                        m.quantity > 0
-                          ? 'text-emerald-700'
-                          : m.quantity < 0
-                            ? 'text-rose-600'
-                            : 'text-slate-600'
-                      "
-                    >
-                      {{ formatSignedQuantity(m.quantity) }}
-                    </td>
-                    <td class="py-3 pr-3 text-slate-600 whitespace-nowrap">
-                      {{ m.createdByUser?.name ?? '—' }}
-                    </td>
-                    <td class="py-3 text-slate-500 max-w-[200px] truncate" :title="m.note ?? ''">
-                      {{ m.note || '—' }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </template>
-      </div>
+      <ProductStockSection
+        v-else
+        :stock-items="stockItems"
+        :stock-movements="stockMovements"
+        :loading="loadingStock"
+        :locations="locations"
+        :can-adjust-stock="canAdjustStock"
+        :can-report-stock="canReportStock"
+        @adjust-stock="openStockAdjustModal"
+        @report-stock="openStockReportModal"
+      />
     </div>
 
     <!-- Ha nincs kiválasztott termék -->
@@ -1491,40 +957,19 @@ onBeforeUnmount(() => {
     />
 
     <!-- Termék Törlés Megerősítő Dialog -->
-    <Dialog
+    <ConfirmDeleteDialog
       v-model:visible="isDeleteProductOpen"
-      modal
       header="Termék törlése"
-      :style="{ width: '26rem', maxWidth: '95vw' }"
+      :item-name="selectedProduct?.name"
+      warning-note="Csak olyan termék törölhető, amelyhez már nem tartoznak variánsok."
+      :loading="deletingProduct"
+      @confirm="confirmDeleteProduct"
     >
-      <div v-if="selectedProduct" class="space-y-4 pt-1">
-        <p class="text-sm text-slate-600">
-          Biztosan törölni szeretnéd a(z)
-          <strong class="text-slate-900">„{{ selectedProduct.name }}”</strong> terméket?
-        </p>
-        <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
-          Csak olyan termék törölhető, amelyhez már nem tartoznak variánsok.
-        </p>
-        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
-          <button
-            type="button"
-            @click="isDeleteProductOpen = false"
-            class="h-9 px-4 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-          >
-            Mégse
-          </button>
-          <button
-            type="button"
-            :disabled="deletingProduct"
-            @click="confirmDeleteProduct"
-            class="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-xs font-semibold text-white flex items-center gap-1.5 cursor-pointer"
-          >
-            <i v-if="deletingProduct" class="pi pi-spin pi-spinner text-xs"></i>
-            <span>Törlés</span>
-          </button>
-        </div>
-      </div>
-    </Dialog>
+      <p v-if="selectedProduct" class="text-sm text-slate-600">
+        Biztosan törölni szeretnéd a(z)
+        <strong class="text-slate-900">„{{ selectedProduct.name }}”</strong> terméket?
+      </p>
+    </ConfirmDeleteDialog>
 
     <!-- Variáns Létrehozó / Szerkesztő Modal -->
     <VariantFormModal
@@ -1534,6 +979,7 @@ onBeforeUnmount(() => {
       :product-id="selectedProduct.id"
       :product-name="selectedProduct.name"
       :manufacturerCode="selectedProduct.manufacturerCode"
+      :vat-rate="Number(selectedProduct.vatRate ?? 27)"
       :existingSkus="variants.map((v) => v.sku)"
       :editing-variant="editingVariant"
       :templateVariant="cloningVariant"
@@ -1541,39 +987,21 @@ onBeforeUnmount(() => {
     />
 
     <!-- Variáns Törlés Megerősítő Dialog -->
-    <Dialog
+    <ConfirmDeleteDialog
       v-model:visible="isDeleteVariantOpen"
-      modal
       header="Variáns törlése"
-      :style="{ width: '26rem', maxWidth: '95vw' }"
+      :item-name="variantToDelete?.sku"
+      confirm-label="Variáns törlése"
+      :loading="deletingVariant"
+      @confirm="confirmDeleteVariant"
     >
-      <div v-if="variantToDelete" class="space-y-4 pt-1">
-        <p class="text-sm text-slate-600">
-          Biztosan törölni szeretnéd a(z)
-          <strong class="font-mono text-slate-900">{{ variantToDelete.sku }}</strong> ({{
-            variantToDelete.size
-          }}) variánst?
-        </p>
-        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
-          <button
-            type="button"
-            @click="isDeleteVariantOpen = false"
-            class="h-9 px-4 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-          >
-            Mégse
-          </button>
-          <button
-            type="button"
-            :disabled="deletingVariant"
-            @click="confirmDeleteVariant"
-            class="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-xs font-semibold text-white flex items-center gap-1.5 cursor-pointer"
-          >
-            <i v-if="deletingVariant" class="pi pi-spin pi-spinner text-xs"></i>
-            <span>Variáns törlése</span>
-          </button>
-        </div>
-      </div>
-    </Dialog>
+      <p v-if="variantToDelete" class="text-sm text-slate-600">
+        Biztosan törölni szeretnéd a(z)
+        <strong class="font-mono text-slate-900">{{ variantToDelete.sku }}</strong>
+        <template v-if="variantToDelete.size"> ({{ variantToDelete.size }})</template>
+        variánst?
+      </p>
+    </ConfirmDeleteDialog>
 
     <!-- Variáns Vonalkódok Modal -->
     <VariantBarcodesModal
@@ -1581,6 +1009,13 @@ onBeforeUnmount(() => {
       :variant="barcodeModalVariant"
       :can-manage="canManageCatalog"
       @updated="onBarcodesUpdated"
+    />
+
+    <!-- Variáns Beszállítók Modal -->
+    <VariantSuppliersModal
+      v-model:visible="isSuppliersModalOpen"
+      :variant="suppliersModalVariant"
+      @updated="onSuppliersUpdated"
     />
 
     <!-- Gyors készletfelvitel / korrekció Modal -->

@@ -4,7 +4,7 @@
 - **Előbb egyeztetés, utána megvalósítás:** Mielőtt bármilyen kódot írnál, fájlt módosítanál/létrehoznál vagy állapotváltoztató parancsot (pl. migráció, telepítés) futtatnál, **mindig vázold fel röviden a tervedet** a felhasználónak (érintett fájlok, megközelítés, lépések, nyitott kérdések), és **várd meg a jóváhagyását**. Ne vágj bele saját magától a megvalósításba.
 - **Előzetes tájékozódás:** A terv összeállításához a kód és a dokumentáció olvasása/keresése engedélyezett, de az érdemi változtatás előtt mindenképp egyeztess.
 - **Modellválasztás (Swarm / Subagent):**
-  - **Architektúra, koordináció, összetett üzleti logika és séma-tervezés:** **Gemini 4 Argon** (`gemini-4-argon-high` / `medium`)
+  - **Architektúra, tervezés, koordináció, összetett üzleti logika és séma-tervezés:** **Gemini 4 Neon** (`gemini-4-neon-xhigh`)
   - **Egyszerűbb részfeladatok, UI komponensek és CRUD űrlapok:** **Gemini 4 Hydrogen** (`gemini-4-hydrogen-high` / `medium`)
   - **Tesztfuttatás, build/lint ellenőrzés (`verifier`), `monitor` és rutin feladatok:** **Gemini 3.8 Flash** (`gemini-3.8-flash-high` / `medium`)
 

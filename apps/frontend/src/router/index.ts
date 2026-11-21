@@ -3,6 +3,7 @@ import PdaLayout from '@/layouts/PdaLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isPdaOrMobileDevice } from '@/utils/device'
 import CatalogView from '@/views/CatalogView.vue'
+import ControlPanelView from '@/views/ControlPanelView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import InventoryView from '@/views/InventoryView.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -99,6 +100,58 @@ const router = createRouter({
           path: 'stock-lookup',
           redirect: '/inventory',
         },
+        {
+          path: 'purchase-orders',
+          name: 'purchase-orders',
+          component: () => import('@/views/PurchaseOrdersView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.ORDER_CLERK,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+            ],
+          },
+        },
+        {
+          path: 'shipments',
+          name: 'shipments',
+          component: () => import('@/views/ShipmentsView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+              Role.ORDER_CLERK,
+            ],
+          },
+        },
+        {
+          path: 'analytics',
+          name: 'analytics',
+          component: () => import('@/views/AnalyticsView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.ORDER_CLERK,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+            ],
+          },
+        },
+        {
+          path: 'control-panel',
+          name: 'control-panel',
+          component: ControlPanelView,
+          meta: {
+            allowedRoles: [Role.ADMIN, Role.BOSS],
+          },
+        },
       ],
     },
     {
@@ -110,6 +163,36 @@ const router = createRouter({
           path: '',
           name: 'pda-home',
           component: PdaHomeView,
+        },
+        {
+          path: 'receiving',
+          name: 'pda-receiving',
+          component: () => import('@/views/PdaReceivingListView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+            ],
+          },
+        },
+        {
+          path: 'receiving/:id',
+          name: 'pda-putaway',
+          component: () => import('@/views/PdaPutawayView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+            ],
+          },
         },
       ],
     },

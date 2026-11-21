@@ -70,7 +70,8 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   productId: string
   productName: string
-  manufacturerCode?: string
+  manufacturerCode?: string | null
+  vatRate?: number
   existingSkus?: string[]
   editingVariant: VariantItem | null
   templateVariant?: VariantItem | null
@@ -90,9 +91,12 @@ const form = ref({
   size: '',
   colors: [] as string[],
   imageUrls: [] as string[],
-  weight: 0.5,
+  weight: '' as number | string,
+  netWeight: '' as number | string,
+  volume: '' as number | string,
   costPrice: 0,
-  price: 0,
+  netPrice: 0,
+  grossPrice: 0,
   isActive: true,
 })
 
@@ -113,6 +117,27 @@ const existingSkuSet = computed(() => {
   const list = props.existingSkus ?? []
   return new Set(list.map((s) => s.trim().toUpperCase()))
 })
+
+const effectiveVatRate = computed(() => {
+  const rate = Number(props.vatRate ?? 27)
+  return Number.isFinite(rate) && rate >= 0 ? rate : 27
+})
+
+function round2(val: number): number {
+  return Math.round((val + Number.EPSILON) * 100) / 100
+}
+
+function onNetPriceInput() {
+  if (!isValidNonNegativeNumber(form.value.netPrice)) return
+  const net = Number(form.value.netPrice)
+  form.value.grossPrice = round2(net * (1 + effectiveVatRate.value / 100))
+}
+
+function onGrossPriceInput() {
+  if (!isValidNonNegativeNumber(form.value.grossPrice)) return
+  const gross = Number(form.value.grossPrice)
+  form.value.netPrice = round2(gross / (1 + effectiveVatRate.value / 100))
+}
 
 const sampleSize = computed(() => previewRows.value[0]?.size || 'L')
 const sampleBaseSku = computed(() => baseSku.value.trim() || '13102117421')
@@ -173,12 +198,15 @@ watch(
       const v = props.editingVariant
       form.value = {
         sku: v.sku,
-        size: v.size,
+        size: v.size ?? '',
         colors: Array.isArray(v.colors) ? [...v.colors] : [],
         imageUrls: Array.isArray(v.imageUrls) ? [...v.imageUrls] : [],
-        weight: Number(v.weight ?? 0),
+        weight: v.weight !== null && v.weight !== undefined ? Number(v.weight) : '',
+        netWeight: v.netWeight !== null && v.netWeight !== undefined ? Number(v.netWeight) : '',
+        volume: v.volume !== null && v.volume !== undefined ? Number(v.volume) : '',
         costPrice: Number(v.costPrice ?? 0),
-        price: Number(v.price ?? 0),
+        netPrice: Number(v.netPrice ?? 0),
+        grossPrice: Number(v.grossPrice ?? 0),
         isActive: v.isActive,
       }
       baseSku.value = ''
@@ -189,9 +217,12 @@ watch(
         size: '',
         colors: tpl && Array.isArray(tpl.colors) ? [...tpl.colors] : [],
         imageUrls: tpl && Array.isArray(tpl.imageUrls) ? [...tpl.imageUrls] : [],
-        weight: tpl ? Number(tpl.weight ?? 0.5) : 0.5,
+        weight: tpl && tpl.weight !== null && tpl.weight !== undefined ? Number(tpl.weight) : '',
+        netWeight: tpl && tpl.netWeight !== null && tpl.netWeight !== undefined ? Number(tpl.netWeight) : '',
+        volume: tpl && tpl.volume !== null && tpl.volume !== undefined ? Number(tpl.volume) : '',
         costPrice: tpl ? Number(tpl.costPrice ?? 0) : 0,
-        price: tpl ? Number(tpl.price ?? 0) : 0,
+        netPrice: tpl ? Number(tpl.netPrice ?? 0) : 0,
+        grossPrice: tpl ? Number(tpl.grossPrice ?? 0) : 0,
         isActive: tpl ? tpl.isActive : true,
       }
       baseSku.value = (props.manufacturerCode || '').trim()
@@ -285,6 +316,16 @@ function addSizeRow(size: string) {
   })
 }
 
+function addSimpleNoSizeRow() {
+  if (isSizeSelected('')) return
+  previewRows.value.push({
+    size: '',
+    sku: buildRowSku(baseSku.value, skuFormat.value, ''),
+    primaryBarcode: '',
+    skuManuallyEdited: false,
+  })
+}
+
 function toggleSize(size: string) {
   const idx = previewRows.value.findIndex((r) => r.size === size)
   if (idx >= 0) {
@@ -353,6 +394,18 @@ function isValidNonNegativeNumber(val: unknown): boolean {
   return Number.isFinite(num) && num >= 0
 }
 
+function isOptionalValidNonNegativeNumber(val: unknown): boolean {
+  if (val === '' || val === null || val === undefined) return true
+  const num = Number(val)
+  return Number.isFinite(num) && num >= 0
+}
+
+function toOptionalNumber(val: unknown): number | undefined {
+  if (val === '' || val === null || val === undefined) return undefined
+  const num = Number(val)
+  return Number.isFinite(num) ? num : undefined
+}
+
 function validateStep1(): boolean {
   if (colorInput.value.trim()) {
     addColorsFromInput()
@@ -362,25 +415,29 @@ function validateStep1(): boolean {
     return false
   }
 
-  if (form.value.colors.length === 0) {
+  if (
+    !isOptionalValidNonNegativeNumber(form.value.weight) ||
+    !isOptionalValidNonNegativeNumber(form.value.netWeight) ||
+    !isOptionalValidNonNegativeNumber(form.value.volume)
+  ) {
     toast.add({
       severity: 'error',
-      summary: 'Hiányzó szín',
-      detail: 'Legalább egy színt adj meg a variánshoz.',
+      summary: 'Érvénytelen fizikai adat',
+      detail: 'A súly és térfogat értékek nem lehetnek negatívak.',
       life: 4000,
     })
     return false
   }
 
   if (
-    !isValidNonNegativeNumber(form.value.weight) ||
     !isValidNonNegativeNumber(form.value.costPrice) ||
-    !isValidNonNegativeNumber(form.value.price)
+    !isValidNonNegativeNumber(form.value.netPrice) ||
+    !isValidNonNegativeNumber(form.value.grossPrice)
   ) {
     toast.add({
       severity: 'error',
-      summary: 'Érvénytelen számérték',
-      detail: 'A súly, beszerzési ár és eladási ár nem lehet üres vagy negatív.',
+      summary: 'Érvénytelen ár',
+      detail: 'A beszerzési ár, nettó ár és bruttó ár nem lehet üres vagy negatív.',
       life: 4000,
     })
     return false
@@ -449,19 +506,22 @@ async function handleSubmit() {
 
   if (!validateStep1()) return
 
-  const weight = Number(form.value.weight)
+  const weight = toOptionalNumber(form.value.weight)
+  const netWeight = toOptionalNumber(form.value.netWeight)
+  const volume = toOptionalNumber(form.value.volume)
   const costPrice = Number(form.value.costPrice)
-  const price = Number(form.value.price)
+  const netPrice = Number(form.value.netPrice)
+  const grossPrice = Number(form.value.grossPrice)
 
   if (props.mode === 'create') {
     if (!validateStep2()) return
 
     for (let i = 0; i < previewRows.value.length; i++) {
       const row = previewRows.value[i]!
-      if (!row.sku.trim() || !row.size.trim()) {
+      if (!row.sku.trim()) {
         toast.add({
           severity: 'error',
-          summary: 'Hiányzó SKU vagy méret',
+          summary: 'Hiányzó SKU',
           detail: 'Minden generálandó variánsnál kötelező a cikkszám (SKU) megadása.',
           life: 4000,
         })
@@ -492,10 +552,13 @@ async function handleSubmit() {
       const items: BulkVariantItemPayload[] = previewRows.value.map((row) => ({
         sku: row.sku.trim(),
         colors: [...form.value.colors],
-        size: row.size.trim(),
+        size: row.size.trim() || undefined,
         weight,
+        netWeight,
+        volume,
         costPrice,
-        price,
+        netPrice,
+        grossPrice,
         imageUrls: form.value.imageUrls.length > 0 ? [...form.value.imageUrls] : undefined,
         isActive: form.value.isActive,
         ...(row.primaryBarcode.trim()
@@ -533,11 +596,11 @@ async function handleSubmit() {
   const sku = form.value.sku.trim()
   const size = form.value.size.trim()
 
-  if (!sku || !size) {
+  if (!sku) {
     toast.add({
       severity: 'error',
-      summary: 'Hiányzó adatok',
-      detail: 'A cikkszám (SKU) és a méret megadása kötelező.',
+      summary: 'Hiányzó adat',
+      detail: 'A cikkszám (SKU) megadása kötelező.',
       life: 4000,
     })
     return
@@ -548,12 +611,15 @@ async function handleSubmit() {
   try {
     const res = await variantApi.update(props.editingVariant.id, {
       sku,
-      size,
+      size: size || undefined,
       colors: form.value.colors,
       imageUrls: form.value.imageUrls,
       weight,
+      netWeight,
+      volume,
       costPrice,
-      price,
+      netPrice,
+      grossPrice,
       isActive: form.value.isActive,
     })
     const saved = res.data
@@ -680,13 +746,12 @@ async function handleSubmit() {
           </div>
 
           <div class="space-y-1.5">
-            <label class="block text-xs font-medium text-slate-600">Méret *</label>
+            <label class="block text-xs font-medium text-slate-600">Méret (opcionális)</label>
             <input
               v-model="form.size"
               type="text"
-              required
               maxlength="50"
-              placeholder="pl. M, L, XL, 42, 54"
+              placeholder="pl. M, L, XL, 42 (egyszerű terméknél üres)"
               class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
             />
           </div>
@@ -695,7 +760,7 @@ async function handleSubmit() {
         <!-- Színek -->
         <div class="space-y-2">
           <label class="block text-xs font-medium text-slate-600">
-            Színek * (kattints a gyakori színekre vagy adj meg egyénit)
+            Színek (opcionális — kattints a gyakori színekre vagy adj meg egyénit)
           </label>
           <div class="flex flex-wrap gap-1.5">
             <button
@@ -803,12 +868,51 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <!-- Súly + Beszerzési ár + Eladási ár -->
+        <!-- Súly + Térfogat (opcionális) -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div class="space-y-1.5">
-            <label class="block text-xs font-medium text-slate-600">Súly (kg) *</label>
+            <label class="block text-xs font-medium text-slate-600">Bruttó súly (kg)</label>
             <input
               v-model.number="form.weight"
+              type="number"
+              min="0"
+              step="0.001"
+              placeholder="pl. 3.25"
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-slate-600">Nettó súly (kg)</label>
+            <input
+              v-model.number="form.netWeight"
+              type="number"
+              min="0"
+              step="0.001"
+              placeholder="opcionális"
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-slate-600">Térfogat (m³)</label>
+            <input
+              v-model.number="form.volume"
+              type="number"
+              min="0"
+              step="0.000001"
+              placeholder="opcionális"
+              class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+            />
+          </div>
+        </div>
+
+        <!-- Árak (ÁFA: effectiveVatRate%) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-slate-600">Beszerzési ár (Ft) *</label>
+            <input
+              v-model.number="form.costPrice"
               type="number"
               min="0"
               step="0.01"
@@ -818,24 +922,28 @@ async function handleSubmit() {
           </div>
 
           <div class="space-y-1.5">
-            <label class="block text-xs font-medium text-slate-600">Beszerzési ár (Ft) *</label>
+            <label class="block text-xs font-medium text-slate-600">
+              Nettó ár (Ft) * <span class="text-[10px] text-slate-400">({{ effectiveVatRate }}% ÁFA)</span>
+            </label>
             <input
-              v-model.number="form.costPrice"
+              v-model.number="form.netPrice"
+              @input="onNetPriceInput"
               type="number"
               min="0"
-              step="1"
+              step="0.01"
               required
               class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
             />
           </div>
 
           <div class="space-y-1.5">
-            <label class="block text-xs font-medium text-slate-600">Eladási ár (Ft) *</label>
+            <label class="block text-xs font-medium text-slate-600">Bruttó ár (Ft) *</label>
             <input
-              v-model.number="form.price"
+              v-model.number="form.grossPrice"
+              @input="onGrossPriceInput"
               type="number"
               min="0"
-              step="1"
+              step="0.01"
               required
               class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
             />
@@ -894,7 +1002,7 @@ async function handleSubmit() {
           <!-- Színek -->
           <div class="space-y-2.5">
             <label class="block text-xs font-semibold text-slate-700">
-              Színek * <span class="font-normal text-slate-400">(kattints vagy írj be egyénit)</span>
+              Színek <span class="font-normal text-slate-400">(opcionális — kattints vagy írj be egyénit)</span>
             </label>
 
             <div class="flex flex-wrap gap-2">
@@ -1006,12 +1114,57 @@ async function handleSubmit() {
             </div>
           </div>
 
-          <!-- Súly + Beszerzési ár + Eladási ár -->
+          <!-- Fizikai adatok (opcionális) -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="space-y-1.5">
-              <label class="block text-xs font-semibold text-slate-700">Súly (kg) *</label>
+              <label class="block text-xs font-semibold text-slate-700">
+                Bruttó súly (kg) <span class="font-normal text-slate-400">(opcionális)</span>
+              </label>
               <input
                 v-model.number="form.weight"
+                type="number"
+                min="0"
+                step="0.001"
+                placeholder="pl. 3.25"
+                class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-xs font-semibold text-slate-700">
+                Nettó súly (kg) <span class="font-normal text-slate-400">(opcionális)</span>
+              </label>
+              <input
+                v-model.number="form.netWeight"
+                type="number"
+                min="0"
+                step="0.001"
+                placeholder="opcionális"
+                class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+              />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-xs font-semibold text-slate-700">
+                Térfogat (m³) <span class="font-normal text-slate-400">(opcionális)</span>
+              </label>
+              <input
+                v-model.number="form.volume"
+                type="number"
+                min="0"
+                step="0.000001"
+                placeholder="opcionális"
+                class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+              />
+            </div>
+          </div>
+
+          <!-- Árak -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="space-y-1.5">
+              <label class="block text-xs font-semibold text-slate-700">Beszerzési ár (Ft) *</label>
+              <input
+                v-model.number="form.costPrice"
                 type="number"
                 min="0"
                 step="0.01"
@@ -1020,23 +1173,28 @@ async function handleSubmit() {
             </div>
 
             <div class="space-y-1.5">
-              <label class="block text-xs font-semibold text-slate-700">Beszerzési ár (Ft) *</label>
+              <label class="block text-xs font-semibold text-slate-700">
+                Nettó ár (Ft) *
+                <span class="font-normal text-slate-400">({{ effectiveVatRate }}% ÁFA)</span>
+              </label>
               <input
-                v-model.number="form.costPrice"
+                v-model.number="form.netPrice"
+                @input="onNetPriceInput"
                 type="number"
                 min="0"
-                step="1"
+                step="0.01"
                 class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
               />
             </div>
 
             <div class="space-y-1.5">
-              <label class="block text-xs font-semibold text-slate-700">Eladási ár (Ft) *</label>
+              <label class="block text-xs font-semibold text-slate-700">Bruttó ár (Ft) *</label>
               <input
-                v-model.number="form.price"
+                v-model.number="form.grossPrice"
+                @input="onGrossPriceInput"
                 type="number"
                 min="0"
-                step="1"
+                step="0.01"
                 class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
               />
             </div>
@@ -1108,6 +1266,18 @@ async function handleSubmit() {
                 class="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200/80 text-xs font-semibold cursor-pointer transition"
               >
                 + {{ preset.label }}
+              </button>
+              <button
+                type="button"
+                @click="addSimpleNoSizeRow"
+                class="px-3 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition"
+                :class="
+                  isSizeSelected('')
+                    ? 'bg-orange-600 text-white border-orange-600'
+                    : 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900'
+                "
+              >
+                + Méret nélküli (egyszerű termék)
               </button>
               <button
                 v-if="previewRows.length > 0"
@@ -1212,10 +1382,10 @@ async function handleSubmit() {
             <div v-if="previewRows.length > 0" class="flex flex-wrap gap-1.5">
               <span
                 v-for="(row, idx) in previewRows"
-                :key="row.size"
+                :key="row.size || '__NO_SIZE__'"
                 class="inline-flex items-center gap-1.5 bg-white border border-emerald-200 text-slate-900 text-xs font-bold px-2.5 py-1 rounded-lg"
               >
-                <span>{{ row.size }}</span>
+                <span>{{ row.size || 'Méret nélkül' }}</span>
                 <button
                   type="button"
                   @click="removePreviewRow(idx)"
@@ -1365,7 +1535,7 @@ async function handleSubmit() {
             >
               <div
                 v-for="(row, idx) in previewRows"
-                :key="row.size"
+                :key="row.size || '__NO_SIZE__'"
                 class="p-2.5 flex flex-wrap sm:flex-nowrap items-center gap-2.5 text-xs transition"
                 :class="
                   isSkuInExisting(row.sku) || isSkuDuplicateInBatch(row.sku, idx)
@@ -1377,7 +1547,7 @@ async function handleSubmit() {
                 <span
                   class="w-12 text-center font-bold text-slate-900 bg-slate-100 px-2 py-1.5 rounded-lg shrink-0"
                 >
-                  {{ row.size }}
+                  {{ row.size || '—' }}
                 </span>
 
                 <!-- Szerkeszthető SKU -->
