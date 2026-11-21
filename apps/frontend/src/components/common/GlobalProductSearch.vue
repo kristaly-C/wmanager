@@ -141,7 +141,8 @@ function mapVariantToQuickInfo(v: VariantItem): QuickProductInfo {
     variantLabel,
     sku: v.sku,
     barcode,
-    price: Number(v.price ?? 0),
+    grossPrice: Number(v.grossPrice ?? 0),
+    netPrice: Number(v.netPrice ?? 0),
     freeStock,
     shelf,
     imageUrl: v.imageUrls?.[0] ?? v.product?.imageUrls?.[0] ?? null,
@@ -554,7 +555,7 @@ onUnmounted(() => {
                 </span>
 
                 <span>Vonalkód: <b class="font-mono text-slate-700">{{ item.barcode }}</b></span>
-                <span>Ár: <b class="text-slate-800">{{ item.price.toLocaleString('hu-HU') }} Ft</b></span>
+                <span>Bruttó ár: <b class="text-slate-800">{{ item.grossPrice.toLocaleString('hu-HU') }} Ft</b></span>
               </div>
             </div>
           </div>
@@ -673,9 +674,12 @@ onUnmounted(() => {
 
         <div class="flex gap-3 shrink-0">
           <div class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-right">
-            <span class="block text-xs text-slate-400">Eladási ár</span>
+            <span class="block text-xs text-slate-400">Bruttó ár</span>
             <span class="text-lg font-black text-slate-900">
-              {{ searchStore.activeProductSheet.price.toLocaleString('hu-HU') }} Ft
+              {{ searchStore.activeProductSheet.grossPrice.toLocaleString('hu-HU') }} Ft
+            </span>
+            <span class="block text-[11px] text-slate-400 mt-0.5">
+              Nettó: {{ searchStore.activeProductSheet.netPrice.toLocaleString('hu-HU', { maximumFractionDigits: 2 }) }} Ft
             </span>
           </div>
           <div

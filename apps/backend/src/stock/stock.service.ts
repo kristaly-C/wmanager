@@ -662,8 +662,8 @@ export class StockService {
             location: { name: string };
             variant: {
                 sku: string;
-                size: string;
-                product: { name: string; manufacturerCode: string };
+                size: string | null;
+                product: { name: string; manufacturerCode: string | null };
                 variantBarcodes: Array<{ barcode: string }>;
             };
         },
@@ -672,9 +672,9 @@ export class StockService {
         return (
             item.location.name.toLowerCase().includes(qLower) ||
             item.variant.sku.toLowerCase().includes(qLower) ||
-            item.variant.size.toLowerCase().includes(qLower) ||
+            (item.variant.size ?? '').toLowerCase().includes(qLower) ||
             item.variant.product.name.toLowerCase().includes(qLower) ||
-            item.variant.product.manufacturerCode.toLowerCase().includes(qLower) ||
+            (item.variant.product.manufacturerCode ?? '').toLowerCase().includes(qLower) ||
             item.variant.variantBarcodes.some((b) => b.barcode.toLowerCase().includes(qLower))
         );
     }

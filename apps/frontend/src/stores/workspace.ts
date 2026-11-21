@@ -68,6 +68,7 @@ export const WORKSPACES: WorkspaceConfig[] = [
       { label: 'Pénzügy & KPI', icon: 'pi pi-chart-line', to: '/' },
       { label: 'Audit Napló', icon: 'pi pi-history', to: '/movements' },
       { label: 'Felhasználók', icon: 'pi pi-users', to: '/users' },
+      { label: 'Vezérlőpult', icon: 'pi pi-sliders-h', to: '/control-panel' },
     ],
   },
 ]

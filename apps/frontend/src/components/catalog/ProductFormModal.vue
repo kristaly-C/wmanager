@@ -26,6 +26,7 @@ const toast = useToast()
 const saving = ref(false)
 
 const DEFAULT_GENDERS = ['Férfi', 'Női', 'Unisex', 'Gyerek']
+const UNIT_SUGGESTIONS = ['DB', 'PÁR', 'CSOMAG', 'SZETT', 'M', 'L', 'KG']
 
 const form = ref({
   name: '',
@@ -34,13 +35,20 @@ const form = ref({
   primarySupplierId: '',
   model: '',
   manufacturerCode: '',
-  gender: 'Unisex',
+  gender: '',
   vatRate: 27,
+  unit: 'DB',
+  vtszCode: '',
+  originCountry: '',
+  season: '',
+  importantNote: '',
   material: '',
   usageArea: '',
   functionality: '',
   description: '',
   imageUrls: [] as string[],
+  isSerialized: false,
+  isPurchasable: true,
   isActive: true,
 })
 
@@ -102,15 +110,22 @@ watch(
         brandId: p.brandId,
         categoryId: p.categoryId,
         primarySupplierId: p.primarySupplierId,
-        model: p.model,
-        manufacturerCode: p.manufacturerCode,
-        gender: p.gender || 'Unisex',
+        model: p.model ?? '',
+        manufacturerCode: p.manufacturerCode ?? '',
+        gender: p.gender ?? '',
         vatRate: Number(p.vatRate ?? 27),
+        unit: p.unit || 'DB',
+        vtszCode: p.vtszCode ?? '',
+        originCountry: p.originCountry ?? '',
+        season: p.season ?? '',
+        importantNote: p.importantNote ?? '',
         material: p.material ?? '',
         usageArea: p.usageArea ?? '',
         functionality: p.functionality ?? '',
         description: p.description ?? '',
         imageUrls: Array.isArray(p.imageUrls) ? [...p.imageUrls] : [],
+        isSerialized: Boolean(p.isSerialized),
+        isPurchasable: p.isPurchasable ?? true,
         isActive: p.isActive,
       }
     } else {
@@ -121,13 +136,20 @@ watch(
         primarySupplierId: sortedSuppliers.value[0]?.id ?? '',
         model: '',
         manufacturerCode: '',
-        gender: 'Unisex',
+        gender: '',
         vatRate: 27,
+        unit: 'DB',
+        vtszCode: '',
+        originCountry: '',
+        season: '',
+        importantNote: '',
         material: '',
         usageArea: '',
         functionality: '',
         description: '',
         imageUrls: [],
+        isSerialized: false,
+        isPurchasable: true,
         isActive: true,
       }
     }
@@ -183,13 +205,14 @@ async function handleSubmit() {
   const model = form.value.model.trim()
   const manufacturerCode = form.value.manufacturerCode.trim()
   const gender = form.value.gender.trim()
+  const unit = form.value.unit.trim() || 'DB'
   const vatRate = Number(form.value.vatRate)
 
-  if (!name || !model || !manufacturerCode || !gender) {
+  if (!name) {
     toast.add({
       severity: 'error',
-      summary: 'Hiányzó adatok',
-      detail: 'A név, modell, gyártói kód és nem megadása kötelező.',
+      summary: 'Hiányzó adat',
+      detail: 'A termék megnevezése kötelező.',
       life: 4000,
     })
     return
@@ -250,15 +273,22 @@ async function handleSubmit() {
     brandId: form.value.brandId,
     categoryId: form.value.categoryId,
     primarySupplierId: form.value.primarySupplierId,
-    model,
-    manufacturerCode,
-    gender,
+    model: model || undefined,
+    manufacturerCode: manufacturerCode || undefined,
+    gender: gender || undefined,
     vatRate,
+    unit,
+    vtszCode: form.value.vtszCode.trim() || undefined,
+    originCountry: form.value.originCountry.trim().toUpperCase() || undefined,
+    season: form.value.season.trim() || undefined,
+    importantNote: form.value.importantNote.trim() || undefined,
     material: form.value.material.trim() || undefined,
     usageArea: form.value.usageArea.trim() || undefined,
     functionality: form.value.functionality.trim() || undefined,
     description: form.value.description.trim() || undefined,
     imageUrls: form.value.imageUrls,
+    isSerialized: form.value.isSerialized,
+    isPurchasable: form.value.isPurchasable,
     isActive: form.value.isActive,
   }
 
@@ -370,23 +400,21 @@ async function handleSubmit() {
       <!-- Modell + Gyártói kód -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div class="space-y-1.5">
-          <label class="block text-xs font-medium text-slate-600">Modell *</label>
+          <label class="block text-xs font-medium text-slate-600">Modell (opcionális)</label>
           <input
             v-model="form.model"
             type="text"
-            required
             maxlength="150"
-            placeholder="pl. T-GP Plus R v3"
+            placeholder="pl. T-GP Plus R v3 vagy EASY03"
             class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
           />
         </div>
 
         <div class="space-y-1.5">
-          <label class="block text-xs font-medium text-slate-600">Gyártói kód (MPN) *</label>
+          <label class="block text-xs font-medium text-slate-600">Gyártói kód / MPN (opcionális)</label>
           <input
             v-model="form.manufacturerCode"
             type="text"
-            required
             maxlength="150"
             placeholder="pl. 3300520-12"
             class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm text-slate-900 outline-none focus:border-orange-500"
@@ -394,17 +422,21 @@ async function handleSubmit() {
         </div>
       </div>
 
-      <!-- Nem + ÁFA kulcs + Felhasználási terület -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <!-- Mennyiségi egység + ÁFA kulcs + Nem + Szezon -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div class="space-y-1.5">
-          <label class="block text-xs font-medium text-slate-600">Nem *</label>
-          <select
-            v-model="form.gender"
-            required
-            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
-          >
-            <option v-for="g in genderOptions" :key="g" :value="g">{{ g }}</option>
-          </select>
+          <label class="block text-xs font-medium text-slate-600">Mennyiségi egység</label>
+          <input
+            v-model="form.unit"
+            type="text"
+            list="product-unit-options"
+            maxlength="20"
+            placeholder="DB"
+            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 uppercase text-sm text-slate-900 outline-none focus:border-orange-500"
+          />
+          <datalist id="product-unit-options">
+            <option v-for="u in UNIT_SUGGESTIONS" :key="u" :value="u" />
+          </datalist>
         </div>
 
         <div class="space-y-1.5">
@@ -421,6 +453,53 @@ async function handleSubmit() {
         </div>
 
         <div class="space-y-1.5">
+          <label class="block text-xs font-medium text-slate-600">Nem (opcionális)</label>
+          <select
+            v-model="form.gender"
+            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+          >
+            <option value="">— (Nem releváns)</option>
+            <option v-for="g in genderOptions" :key="g" :value="g">{{ g }}</option>
+          </select>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block text-xs font-medium text-slate-600">Szezon</label>
+          <input
+            v-model="form.season"
+            type="text"
+            maxlength="50"
+            placeholder="pl. 4 évszakos"
+            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
+          />
+        </div>
+      </div>
+
+      <!-- VTSZ + Származási ország + Felhasználási terület -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="space-y-1.5">
+          <label class="block text-xs font-medium text-slate-600">VTSZ kód</label>
+          <input
+            v-model="form.vtszCode"
+            type="text"
+            maxlength="32"
+            placeholder="pl. 42022290"
+            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm text-slate-900 outline-none focus:border-orange-500"
+          />
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block text-xs font-medium text-slate-600">Származási ország (ISO)</label>
+          <input
+            v-model="form.originCountry"
+            type="text"
+            maxlength="10"
+            placeholder="pl. IT, DE, CN"
+            class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 font-mono uppercase text-sm text-slate-900 outline-none focus:border-orange-500"
+          />
+        </div>
+
+        <div class="space-y-1.5">
           <label class="block text-xs font-medium text-slate-600">Felhasználási terület</label>
           <input
             v-model="form.usageArea"
@@ -430,6 +509,20 @@ async function handleSubmit() {
             class="w-full h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-orange-500"
           />
         </div>
+      </div>
+
+      <!-- Kiemelt figyelmeztetés (Fontos) -->
+      <div class="space-y-1.5">
+        <label class="block text-xs font-medium text-slate-600">
+          Kiemelt megjegyzés / figyelmeztetés (Fontos)
+        </label>
+        <input
+          v-model="form.importantNote"
+          type="text"
+          maxlength="1000"
+          placeholder="pl. A felszereléshez külön BF adapter szükséges!"
+          class="w-full h-10 rounded-xl border border-amber-200 bg-amber-50/40 px-3 text-sm text-slate-900 outline-none focus:border-amber-500"
+        />
       </div>
 
       <!-- Anyagösszetétel + Funkcionalitás -->
@@ -511,22 +604,50 @@ async function handleSubmit() {
         </div>
       </div>
 
-      <!-- Aktív státusz -->
-      <label
-        class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 cursor-pointer"
-      >
-        <div>
-          <p class="text-xs font-semibold text-slate-900">Aktív termék</p>
-          <p class="text-[11px] text-slate-500">
-            Inaktív termékek rejtve maradhatnak az új rendeléseknél.
-          </p>
-        </div>
-        <input
-          v-model="form.isActive"
-          type="checkbox"
-          class="size-4 accent-slate-900 cursor-pointer"
-        />
-      </label>
+      <!-- Státusz kapcsolók -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <label
+          class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 cursor-pointer"
+        >
+          <div>
+            <p class="text-xs font-semibold text-slate-900">Aktív</p>
+            <p class="text-[11px] text-slate-500">Katalógusban látható</p>
+          </div>
+          <input
+            v-model="form.isActive"
+            type="checkbox"
+            class="size-4 accent-slate-900 cursor-pointer"
+          />
+        </label>
+
+        <label
+          class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 cursor-pointer"
+        >
+          <div>
+            <p class="text-xs font-semibold text-slate-900">Vásárolható</p>
+            <p class="text-[11px] text-slate-500">Rendelhető / eladható</p>
+          </div>
+          <input
+            v-model="form.isPurchasable"
+            type="checkbox"
+            class="size-4 accent-slate-900 cursor-pointer"
+          />
+        </label>
+
+        <label
+          class="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-3.5 py-2.5 cursor-pointer"
+        >
+          <div>
+            <p class="text-xs font-semibold text-slate-900">Gyáriszámos</p>
+            <p class="text-[11px] text-slate-500">S/N követés előkészítés</p>
+          </div>
+          <input
+            v-model="form.isSerialized"
+            type="checkbox"
+            class="size-4 accent-slate-900 cursor-pointer"
+          />
+        </label>
+      </div>
 
       <!-- Lábléc gombok -->
       <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">

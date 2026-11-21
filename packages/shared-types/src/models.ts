@@ -4,18 +4,26 @@ export interface Product {
     id: string;
     name: string;
     brandId: string;
-    gender: string;
-    usageArea: string;
-    material: string;
-    model: string;
-    manufacturerCode: string;
-    functionality: string;
-    description?: string;
+    gender?: string | null;
+    usageArea?: string | null;
+    material?: string | null;
+    model?: string | null;
+    manufacturerCode?: string | null;
+    functionality?: string | null;
+    description?: string | null;
     vatRate: number;
+
+    unit: string;
+    vtszCode?: string | null;
+    originCountry?: string | null;
+    importantNote?: string | null;
+    season?: string | null;
+    isSerialized: boolean;
+    isPurchasable: boolean;
 
     primarySupplierId: string;
     imageUrls: string[];
-    attributes: Record<string, string>;
+    attributes?: Record<string, string> | null;
 
     categoryId: string;
 
@@ -64,11 +72,14 @@ export interface Variant {
 
     sku: string;
     colors: string[];
-    size: string;
-    weight: number;
+    size?: string | null;
+    weight?: number | null;
+    netWeight?: number | null;
+    volume?: number | null;
     imageUrls: string[];
 
-    price: number;
+    netPrice: number;
+    grossPrice: number;
     costPrice?: number;
 
     isActive: boolean;

@@ -421,7 +421,10 @@ onBeforeUnmount(() => {
           </p>
           <div class="flex flex-wrap items-center gap-2 text-[11px] text-[#4c534e] mt-0.5">
             <span class="font-mono font-semibold text-[#171918]">{{ selectedVariant.sku }}</span>
-            <span class="bg-[#eff1ed] text-[#171918] font-semibold px-1.5 py-0.5 rounded">
+            <span
+              v-if="selectedVariant.size"
+              class="bg-[#eff1ed] text-[#171918] font-semibold px-1.5 py-0.5 rounded"
+            >
               {{ selectedVariant.size }}
             </span>
             <span v-if="selectedVariant.colors.length > 0">
@@ -465,7 +468,7 @@ onBeforeUnmount(() => {
                 <p class="text-xs font-semibold text-[#171918] truncate">{{ getProductName(v) }}</p>
                 <p class="text-[11px] text-[#686f6a] truncate">
                   <span class="font-mono font-medium text-[#171918]">{{ v.sku }}</span>
-                  · {{ v.size }}
+                  <span v-if="v.size">· {{ v.size }}</span>
                   <span v-if="v.colors.length > 0">· {{ v.colors.join(', ') }}</span>
                 </p>
               </div>

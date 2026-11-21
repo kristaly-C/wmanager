@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Get, UseGuards, Patch } from "@nestjs/common";
+import { Controller, Post, Body, Get, UseGuards, Patch, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
@@ -17,10 +18,10 @@ export class AuthController {
         return user;
     }
 
-    @Throttle({ default: { limit: 5, ttl: 60000 } })
+    @Throttle({ default: { limit: 30, ttl: 60000 } })
     @Post('login')
-    login(@Body() logindDto: LoginDto){
-        return this.authService.login(logindDto);
+    login(@Body() logindDto: LoginDto, @Req() req: Request){
+        return this.authService.login(logindDto, req.ip || 'unknown');
     }
 
     @Throttle({ default: { limit: 5, ttl: 60000 } })
@@ -30,10 +31,10 @@ export class AuthController {
         return this.authService.changePassword(actor.userId, dto);
     }
 
-    @Throttle({ default: {limit: 15, ttl: 60000}})
+    @Throttle({ default: {limit: 60, ttl: 60000}})
     @Post('qr-login')
-    loginWithQr(@Body() dto: QrLoginDto) {
-        return this.authService.loginWithQr(dto);
+    loginWithQr(@Body() dto: QrLoginDto, @Req() req: Request) {
+        return this.authService.loginWithQr(dto, req.ip || 'unknown');
     }
 
     @UseGuards(JwtAuthGuard)

@@ -31,9 +31,12 @@ export interface VariantItem {
   productId: string
   sku: string
   colors: string[]
-  size: string
-  weight: number | string
-  price: number | string
+  size?: string | null
+  weight?: number | string | null
+  netWeight?: number | string | null
+  volume?: number | string | null
+  netPrice: number | string
+  grossPrice: number | string
   costPrice?: number | string
   imageUrls?: string[]
   isActive: boolean
@@ -47,10 +50,13 @@ export interface VariantItem {
 export interface CreateVariantPayload {
   productId: string
   sku: string
-  colors: string[]
-  size: string
-  weight: number
-  price: number
+  colors?: string[]
+  size?: string
+  weight?: number
+  netWeight?: number
+  volume?: number
+  netPrice: number
+  grossPrice: number
   costPrice: number
   imageUrls?: string[]
   isActive?: boolean
@@ -60,10 +66,13 @@ export type UpdateVariantPayload = Partial<Omit<CreateVariantPayload, 'productId
 
 export interface BulkVariantItemPayload {
   sku: string
-  colors: string[]
-  size: string
-  weight: number
-  price: number
+  colors?: string[]
+  size?: string
+  weight?: number
+  netWeight?: number
+  volume?: number
+  netPrice: number
+  grossPrice: number
   costPrice: number
   imageUrls?: string[]
   isActive?: boolean

@@ -3,6 +3,7 @@ import PdaLayout from '@/layouts/PdaLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { isPdaOrMobileDevice } from '@/utils/device'
 import CatalogView from '@/views/CatalogView.vue'
+import ControlPanelView from '@/views/ControlPanelView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import InventoryView from '@/views/InventoryView.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -98,6 +99,14 @@ const router = createRouter({
         {
           path: 'stock-lookup',
           redirect: '/inventory',
+        },
+        {
+          path: 'control-panel',
+          name: 'control-panel',
+          component: ControlPanelView,
+          meta: {
+            allowedRoles: [Role.ADMIN, Role.BOSS],
+          },
         },
       ],
     },

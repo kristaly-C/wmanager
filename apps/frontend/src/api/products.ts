@@ -6,13 +6,20 @@ export interface ProductListItem {
   brandId: string
   categoryId: string
   primarySupplierId: string
-  gender: string
+  gender?: string | null
   usageArea?: string | null
   material?: string | null
-  model: string
-  manufacturerCode: string
+  model?: string | null
+  manufacturerCode?: string | null
   functionality?: string | null
   description?: string | null
+  unit: string
+  vtszCode?: string | null
+  originCountry?: string | null
+  importantNote?: string | null
+  season?: string | null
+  isSerialized: boolean
+  isPurchasable: boolean
   vatRate: number | string
   imageUrls: string[]
   attributes?: Record<string, string> | null
@@ -35,15 +42,22 @@ export interface CreateProductPayload {
   brandId: string
   categoryId: string
   primarySupplierId: string
-  gender: string
+  gender?: string
   usageArea?: string
   material?: string
-  model: string
-  manufacturerCode: string
+  model?: string
+  manufacturerCode?: string
   functionality?: string
   description?: string
+  unit?: string
+  vtszCode?: string
+  originCountry?: string
+  importantNote?: string
+  season?: string
+  isSerialized?: boolean
+  isPurchasable?: boolean
   vatRate: number
-  imageUrls: string[]
+  imageUrls?: string[]
   attributes?: Record<string, string>
   isActive?: boolean
 }

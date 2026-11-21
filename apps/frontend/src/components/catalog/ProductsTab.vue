@@ -770,8 +770,10 @@ onBeforeUnmount(() => {
             <div class="min-w-0">
               <p class="font-bold text-sm text-slate-900 truncate">{{ product.name }}</p>
               <p class="text-xs text-slate-400 truncate">
-                {{ product.brand?.name ?? '—' }} ·
-                <span class="font-mono">{{ product.manufacturerCode }}</span>
+                {{ product.brand?.name ?? '—' }}
+                <template v-if="product.manufacturerCode">
+                  · <span class="font-mono">{{ product.manufacturerCode }}</span>
+                </template>
               </p>
             </div>
           </div>
@@ -820,7 +822,7 @@ onBeforeUnmount(() => {
     >
       <!-- Felső fejléc: Terméknév + Státusz + Szerkesztés / Törlés gombok -->
       <div class="flex flex-wrap items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2.5">
           <h1 class="text-2xl font-bold text-slate-900">{{ selectedProduct.name }}</h1>
           <span
             class="text-xs font-bold px-2.5 py-1 rounded-full"
@@ -831,6 +833,12 @@ onBeforeUnmount(() => {
             "
           >
             {{ selectedProduct.isActive ? 'Aktív' : 'Inaktív' }}
+          </span>
+          <span
+            v-if="selectedProduct.isPurchasable === false"
+            class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200"
+          >
+            Nem vásárolható
           </span>
         </div>
 
@@ -851,6 +859,20 @@ onBeforeUnmount(() => {
           >
             <i class="pi pi-trash text-xs"></i>
           </button>
+        </div>
+      </div>
+
+      <!-- Kiemelt figyelmeztetés (Fontos) -->
+      <div
+        v-if="selectedProduct.importantNote"
+        class="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-xs text-amber-900"
+      >
+        <i class="pi pi-exclamation-triangle text-amber-600 text-sm mt-0.5 shrink-0"></i>
+        <div>
+          <span class="font-bold uppercase tracking-wider text-[10px] text-amber-700 block">
+            Fontos megjegyzés
+          </span>
+          <p class="font-medium mt-0.5 whitespace-pre-line">{{ selectedProduct.importantNote }}</p>
         </div>
       </div>
 
@@ -935,7 +957,7 @@ onBeforeUnmount(() => {
               Gyártói kód
             </span>
             <span class="text-base font-bold font-mono text-slate-900 mt-0.5 block">
-              {{ selectedProduct.manufacturerCode }}
+              {{ selectedProduct.manufacturerCode || '—' }}
             </span>
           </div>
           <div class="p-3.5 rounded-2xl bg-slate-50/80">
@@ -1009,11 +1031,40 @@ onBeforeUnmount(() => {
         </div>
         <div>
           <span class="text-xs text-slate-400 block">Modell</span>
-          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.model }}</span>
+          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.model || '—' }}</span>
         </div>
         <div>
           <span class="text-xs text-slate-400 block">Nem</span>
-          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.gender }}</span>
+          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.gender || '—' }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">Mennyiségi egység</span>
+          <span class="text-sm font-semibold text-slate-800">{{ selectedProduct.unit || 'DB' }}</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">VTSZ kód</span>
+          <span class="text-sm font-mono font-semibold text-slate-800">
+            {{ selectedProduct.vtszCode || '—' }}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">Származási ország</span>
+          <span class="text-sm font-mono font-semibold text-slate-800">
+            {{ selectedProduct.originCountry || '—' }}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">Szezon</span>
+          <span class="text-sm font-semibold text-slate-800">
+            {{ selectedProduct.season || '—' }}
+          </span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-400 block">Vásárolható / Gyáriszámos</span>
+          <span class="text-sm font-semibold text-slate-800">
+            {{ selectedProduct.isPurchasable === false ? 'Nem vásárolható' : 'Vásárolható' }} ·
+            {{ selectedProduct.isSerialized ? 'Gyáriszámos' : 'Nem gyáriszámos' }}
+          </span>
         </div>
         <div>
           <span class="text-xs text-slate-400 block">Anyagösszetétel</span>
@@ -1027,7 +1078,7 @@ onBeforeUnmount(() => {
             {{ selectedProduct.usageArea || '—' }}
           </span>
         </div>
-        <div>
+        <div class="sm:col-span-2">
           <span class="text-xs text-slate-400 block">Funkcionalitás / Jellemzők</span>
           <span class="text-sm font-semibold text-slate-800">
             {{ selectedProduct.functionality || '—' }}
@@ -1080,7 +1131,8 @@ onBeforeUnmount(() => {
                 <th class="pb-3 pr-3">Színek</th>
                 <th class="pb-3 pr-3 text-right">Súly</th>
                 <th v-if="canSeeCostPrice" class="pb-3 pr-3 text-right">Beszerzési ár</th>
-                <th class="pb-3 pr-3 text-right">Eladási ár</th>
+                <th class="pb-3 pr-3 text-right">Nettó ár</th>
+                <th class="pb-3 pr-3 text-right">Bruttó ár</th>
                 <th class="pb-3 pr-3">Vonalkódok</th>
                 <th class="pb-3 pr-3 text-right">Szabad készlet</th>
                 <th class="pb-3 pr-3 text-center">Állapot</th>
@@ -1091,7 +1143,7 @@ onBeforeUnmount(() => {
             </thead>
             <tbody class="divide-y divide-slate-100 text-sm">
               <tr v-for="v in variants" :key="v.id" class="hover:bg-slate-50/70 transition">
-                <td class="py-3.5 pr-3 font-bold text-slate-900">{{ v.size }}</td>
+                <td class="py-3.5 pr-3 font-bold text-slate-900">{{ v.size || '—' }}</td>
                 <td class="py-3.5 pr-3 font-mono text-xs text-slate-600">{{ v.sku }}</td>
                 <td class="py-3.5 pr-3 text-slate-700">
                   <div class="flex items-center gap-2.5">
@@ -1108,11 +1160,11 @@ onBeforeUnmount(() => {
                         class="w-9 h-9 rounded-lg aspect-square object-contain bg-white border border-slate-200 hover:border-orange-400 transition"
                       />
                     </button>
-                    <span>{{ v.colors.join(', ') }}</span>
+                    <span>{{ v.colors.length > 0 ? v.colors.join(', ') : '—' }}</span>
                   </div>
                 </td>
                 <td class="py-3.5 pr-3 text-right text-slate-500 text-xs">
-                  {{ formatWeight(v.weight) }}
+                  {{ formatWeight(v.weight ?? undefined) }}
                 </td>
                 <td
                   v-if="canSeeCostPrice"
@@ -1120,8 +1172,11 @@ onBeforeUnmount(() => {
                 >
                   {{ formatPrice(v.costPrice) }}
                 </td>
+                <td class="py-3.5 pr-3 text-right text-slate-600 whitespace-nowrap">
+                  {{ formatPrice(v.netPrice) }}
+                </td>
                 <td class="py-3.5 pr-3 text-right font-bold text-slate-900 whitespace-nowrap">
-                  {{ formatPrice(v.price) }}
+                  {{ formatPrice(v.grossPrice) }}
                 </td>
                 <td class="py-3.5 pr-3">
                   <button
@@ -1337,10 +1392,14 @@ onBeforeUnmount(() => {
                       </div>
                     </td>
                     <td class="py-3 pr-3 text-xs text-slate-700">
-                      <span class="font-bold text-slate-900">{{ item.variant.size }}</span>
-                      <span class="text-slate-400 mx-1">·</span>
-                      <span>{{ item.variant.colors.join(', ') }}</span>
-                      <span class="text-slate-400 mx-1">·</span>
+                      <template v-if="item.variant.size">
+                        <span class="font-bold text-slate-900">{{ item.variant.size }}</span>
+                        <span class="text-slate-400 mx-1">·</span>
+                      </template>
+                      <template v-if="item.variant.colors.length > 0">
+                        <span>{{ item.variant.colors.join(', ') }}</span>
+                        <span class="text-slate-400 mx-1">·</span>
+                      </template>
                       <span class="font-mono text-slate-500">{{ item.variant.sku }}</span>
                     </td>
                     <td class="py-3 pr-3 text-right font-semibold text-slate-800 whitespace-nowrap">
@@ -1437,7 +1496,7 @@ onBeforeUnmount(() => {
                     </td>
                     <td class="py-3 pr-3 whitespace-nowrap">
                       <span class="font-mono text-slate-700">{{ m.variant.sku }}</span>
-                      <span class="text-slate-400 ml-1">({{ m.variant.size }})</span>
+                      <span v-if="m.variant.size" class="text-slate-400 ml-1">({{ m.variant.size }})</span>
                     </td>
                     <td class="py-3 pr-3 text-slate-700">
                       {{ m.location.name }}
@@ -1534,6 +1593,7 @@ onBeforeUnmount(() => {
       :product-id="selectedProduct.id"
       :product-name="selectedProduct.name"
       :manufacturerCode="selectedProduct.manufacturerCode"
+      :vat-rate="Number(selectedProduct.vatRate ?? 27)"
       :existingSkus="variants.map((v) => v.sku)"
       :editing-variant="editingVariant"
       :templateVariant="cloningVariant"
@@ -1550,9 +1610,9 @@ onBeforeUnmount(() => {
       <div v-if="variantToDelete" class="space-y-4 pt-1">
         <p class="text-sm text-slate-600">
           Biztosan törölni szeretnéd a(z)
-          <strong class="font-mono text-slate-900">{{ variantToDelete.sku }}</strong> ({{
-            variantToDelete.size
-          }}) variánst?
+          <strong class="font-mono text-slate-900">{{ variantToDelete.sku }}</strong>
+          <template v-if="variantToDelete.size"> ({{ variantToDelete.size }})</template>
+          variánst?
         </p>
         <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
           <button

@@ -123,15 +123,23 @@ model Category {
 model Product {
    id String @id @default(uuid())
    name String
-   gender String
+   gender String?
    usageArea String?
    material String?
-   model String
-   manufacturerCode String
+   model String?
+   manufacturerCode String?
    functionality String?
    variants Variant[]
    vatRate Decimal @db.Decimal(5, 2)
    description String?
+
+   unit String @default("DB")
+   vtszCode String?
+   originCountry String?
+   importantNote String?
+   season String?
+   isSerialized Boolean @default(false)
+   isPurchasable Boolean @default(true)
 
    primarySupplierId String
    primarySupplier Supplier @relation(fields: [primarySupplierId], references: [id])
@@ -177,9 +185,11 @@ model Variant {
   product   Product  @relation(fields: [productId], references: [id])
 
   sku       String   @unique
-  colors    String[]
-  size      String
-  weight    Decimal  @db.Decimal(10, 3)
+  colors    String[] @default([])
+  size      String?
+  weight    Decimal? @db.Decimal(10, 3)
+  netWeight Decimal? @db.Decimal(10, 3)
+  volume    Decimal? @db.Decimal(10, 6)
   imageUrls String[] @default([])
   
   stocktakeItems StocktakeItem[]
@@ -189,8 +199,9 @@ model Variant {
   variantBarcodes VariantBarcode[]
   stockReports StockReport[]
 
-  price     Decimal @db.Decimal(12, 2)
-  costPrice Decimal @db.Decimal(12, 2)
+  netPrice   Decimal @db.Decimal(12, 2)
+  grossPrice Decimal @db.Decimal(12, 2)
+  costPrice  Decimal @db.Decimal(12, 2)
 
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())

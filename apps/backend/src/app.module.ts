@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { PrismaModule } from './prisma/prisma.module';
 import { CategoryModule } from './category/category.module';
 import { SupplierModule } from './supplier/supplier.module';
@@ -43,7 +44,7 @@ function validateEnv(config: Record<string, unknown>) {
         ThrottlerModule.forRoot([
             {
                 ttl: 60000,
-                limit: 100,
+                limit: 500,
             },
         ]),
         PrismaModule,
@@ -62,7 +63,7 @@ function validateEnv(config: Record<string, unknown>) {
     providers: [
         {
             provide: APP_GUARD,
-            useClass: ThrottlerGuard,
+            useClass: AppThrottlerGuard,
         },
     ],
 })

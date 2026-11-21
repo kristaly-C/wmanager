@@ -21,24 +21,40 @@ export class BulkVariantItemDto {
     @MaxLength(100)
     sku!: string;
 
+    @IsOptional()
     @IsString()
-    @MinLength(1)
     @MaxLength(50)
-    size!: string;
+    size?: string;
 
+    @IsOptional()
     @IsArray()
     @ArrayMaxSize(20)
     @IsString({ each: true })
     @MaxLength(50, { each: true })
-    colors!: string[];
+    colors?: string[];
+
+    @IsOptional()
+    @Min(0)
+    @IsNumber()
+    weight?: number;
+
+    @IsOptional()
+    @Min(0)
+    @IsNumber()
+    netWeight?: number;
+
+    @IsOptional()
+    @Min(0)
+    @IsNumber()
+    volume?: number;
 
     @Min(0)
     @IsNumber()
-    weight!: number;
+    netPrice!: number;
 
     @Min(0)
     @IsNumber()
-    price!: number;
+    grossPrice!: number;
 
     @Min(0)
     @IsNumber()
