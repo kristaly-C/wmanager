@@ -8,7 +8,7 @@ import { UpdateStockSettingsDto } from "./dto/update-stock-settings.dto";
 import { CreateStockReportDto } from "./dto/create-stock-report.dto";
 import { ResolveStockReportDto } from "./dto/resolve-stock-report.dto";
 import { LocationType, SlotMode, MovementType, Role, StockReportStatus } from "../generated/prisma/enums";
-import { canSeeCostPrice, excludeCostPrice } from "../common/cost-price";
+import { canSeeCostPrice, excludeCostPrice, excludeUnitCostHuf } from "../common/cost-price";
 
 const INITIAL_STOCK_SETTING_KEY = 'initialStockEnabled';
 const MANAGER_ROLES: readonly Role[] = [
@@ -198,7 +198,7 @@ export class StockService {
         const items = canSeeCostPrice(user.role)
             ? rawMovements
             : rawMovements.map((movement) => ({
-                  ...movement,
+                  ...excludeUnitCostHuf(movement),
                   variant: excludeCostPrice(movement.variant),
               }));
         return { items, total };
@@ -260,13 +260,13 @@ export class StockService {
 
         const variant = await this.prisma.variant.findUnique({
             where: { id: dto.variantId},
-            select: { id: true, isActive: true},
+            select: { id: true, productId: true, isActive: true, costPrice: true },
         });
         if(!variant){
             throw new NotFoundException('A megadott variáns nem található');
         }
 
-        return this.prisma.$transaction(async (tx) => {
+        const result = await this.prisma.$transaction(async (tx) => {
             if(location.slotMode === SlotMode.DEDICATED && dto.quantityChange > 0) {
                 const otherStock = await tx.stockItem.findFirst({
                     where: {
@@ -319,13 +319,49 @@ export class StockService {
                     variantId: dto.variantId,
                     locationId: dto.locationId,
                     quantity: dto.quantityChange,
+                    unitCostHuf: variant.costPrice,
                     note: dto.note?.trim() || undefined,
                     createdByUserId: user.userId,
                 },
             });
 
-            return {stockItem, movement};
+            if (
+                dto.type === MovementType.MANUAL_CORRECTION ||
+                dto.type === MovementType.STOCKTAKE_ADJUSTMENT
+            ) {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth() + 1;
+                await tx.variantMonthlyStat.upsert({
+                    where: {
+                        variantId_year_month: {
+                            variantId: variant.id,
+                            year,
+                            month,
+                        },
+                    },
+                    create: {
+                        variantId: variant.id,
+                        productId: variant.productId,
+                        year,
+                        month,
+                        adjustmentQty: dto.quantityChange,
+                    },
+                    update: {
+                        adjustmentQty: { increment: dto.quantityChange },
+                    },
+                });
+            }
+
+            return { stockItem, movement };
         });
+
+        return {
+            stockItem: result.stockItem,
+            movement: canSeeCostPrice(user.role)
+                ? result.movement
+                : excludeUnitCostHuf(result.movement),
+        };
     }
 
     async relocateStock(dto: RelocateStockDto, user: AuthUser) {
@@ -446,7 +482,9 @@ export class StockService {
             return {
                 fromStockItem,
                 toStockItem,
-                movements: [outMovement, inMovement],
+                movements: canSeeCostPrice(user.role)
+                    ? [outMovement, inMovement]
+                    : [excludeUnitCostHuf(outMovement), excludeUnitCostHuf(inMovement)],
             };
         });
     }
@@ -592,14 +630,44 @@ export class StockService {
 
             const delta = newQty - currentQty;
             if (delta !== 0) {
+                const variant = await tx.variant.findUnique({
+                    where: { id: report.variantId },
+                    select: { id: true, productId: true, costPrice: true },
+                });
+                if (!variant) {
+                    throw new NotFoundException('A megadott variáns nem található');
+                }
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth() + 1;
                 await tx.stockMovement.create({
                     data: {
                         type: MovementType.MANUAL_CORRECTION,
                         variantId: report.variantId,
                         locationId: report.locationId,
                         quantity: delta,
+                        unitCostHuf: variant.costPrice,
                         note: `Hiány/eltérés jelentés jóváhagyva: ${report.reason}${resolutionNote ? ' (' + resolutionNote + ')' : ''}`,
                         createdByUserId: user.userId,
+                    },
+                });
+                await tx.variantMonthlyStat.upsert({
+                    where: {
+                        variantId_year_month: {
+                            variantId: variant.id,
+                            year,
+                            month,
+                        },
+                    },
+                    create: {
+                        variantId: variant.id,
+                        productId: variant.productId,
+                        year,
+                        month,
+                        adjustmentQty: delta,
+                    },
+                    update: {
+                        adjustmentQty: { increment: delta },
                     },
                 });
             }

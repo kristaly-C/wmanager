@@ -15,6 +15,8 @@ export interface QuickProductInfo {
     productId: string
     name: string
     variantLabel: string
+    size?: string | null
+    colors?: string[]
     sku: string
     barcode: string
     grossPrice: number
