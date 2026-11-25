@@ -488,7 +488,7 @@ onBeforeUnmount(() => {
               <input
                 v-model="searchInput"
                 type="text"
-                placeholder="Rendelésszám, hivatkozás, beszállító vagy SKU..."
+                placeholder="Rendelésszám, hivatkozás, beszállító, SKU vagy vonalkód..."
                 @keydown.enter.prevent="triggerImmediateSearch"
                 class="w-full h-[38px] bg-white border border-white rounded-[10px] pl-9 pr-3 text-[12px] text-[#171918] placeholder-[#686f6a] outline-none focus:border-[#f46714]/40 transition"
               />

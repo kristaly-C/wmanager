@@ -5,6 +5,11 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
+import {
+    buildVariantBarcodeOrClauses,
+    buildVariantSkuOrClauses,
+    buildVariantSupplierSkuOrClauses,
+} from '../common/barcode-search';
 import { Prisma } from '../generated/prisma/client';
 import { GoodsReceiptStatus, PurchaseOrderStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
@@ -218,10 +223,20 @@ export class PurchaseOrderService {
                                   some: {
                                       variant: {
                                           OR: [
-                                              { sku: { contains: q, mode: 'insensitive' } },
+                                              ...buildVariantSkuOrClauses(q),
+                                              ...buildVariantBarcodeOrClauses(q),
+                                              ...buildVariantSupplierSkuOrClauses(q),
                                               {
                                                   product: {
                                                       name: { contains: q, mode: 'insensitive' },
+                                                  },
+                                              },
+                                              {
+                                                  product: {
+                                                      manufacturerCode: {
+                                                          contains: q,
+                                                          mode: 'insensitive',
+                                                      },
                                                   },
                                               },
                                           ],

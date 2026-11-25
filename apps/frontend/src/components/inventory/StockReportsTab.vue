@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Role } from '@wmanager/shared-types'
 import { useAuthStore } from '@/stores/auth'
 import type { LocationItem } from '@/api/locations'
@@ -30,6 +30,9 @@ const reports = ref<StockReportEntry[]>([])
 const loading = ref(false)
 const resolvingId = ref<string | null>(null)
 const statusFilter = ref<StatusFilter>('PENDING')
+const searchInput = ref('')
+const debouncedSearch = ref('')
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const isManager = computed(() => {
   const role = authStore.user?.role
@@ -87,9 +90,10 @@ function formatDiff(report: StockReportEntry): string {
 async function loadReports() {
   loading.value = true
   try {
-    const res = await stockApi.getReports(
-      statusFilter.value === 'PENDING' ? { status: 'PENDING' } : undefined,
-    )
+    const res = await stockApi.getReports({
+      ...(statusFilter.value === 'PENDING' ? { status: 'PENDING' } : {}),
+      ...(debouncedSearch.value ? { search: debouncedSearch.value } : {}),
+    })
     reports.value = res.data
   } catch (err) {
     toast.add({
@@ -134,8 +138,32 @@ watch(statusFilter, () => {
   void loadReports()
 })
 
+watch(searchInput, (val) => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    const trimmed = val.trim()
+    if (debouncedSearch.value !== trimmed) {
+      debouncedSearch.value = trimmed
+      void loadReports()
+    }
+  }, 300)
+})
+
+function triggerImmediateSearch() {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  debouncedSearch.value = searchInput.value.trim()
+  void loadReports()
+}
+
 onMounted(() => {
   void loadReports()
+})
+
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
 })
 </script>
 
@@ -155,31 +183,44 @@ onMounted(() => {
     <div class="bg-[#f8f9f7] border border-white rounded-[16px] p-5 shadow-xs space-y-4">
       <!-- Szűrő sáv -->
       <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#e8eae6]">
-        <div class="inline-flex items-center bg-white border border-[#e5e8e1] rounded-[11px] p-1 gap-1">
-          <button
-            type="button"
-            @click="statusFilter = 'PENDING'"
-            class="h-[32px] px-3 rounded-[8px] text-xs font-semibold transition cursor-pointer"
-            :class="
-              statusFilter === 'PENDING'
-                ? 'bg-[#171918] text-white'
-                : 'text-[#686f6a] hover:text-[#171918]'
-            "
-          >
-            Függőben (PENDING)
-          </button>
-          <button
-            type="button"
-            @click="statusFilter = 'ALL'"
-            class="h-[32px] px-3 rounded-[8px] text-xs font-semibold transition cursor-pointer"
-            :class="
-              statusFilter === 'ALL'
-                ? 'bg-[#171918] text-white'
-                : 'text-[#686f6a] hover:text-[#171918]'
-            "
-          >
-            Összes
-          </button>
+        <div class="flex flex-wrap items-center gap-2.5 flex-1">
+          <div class="inline-flex items-center bg-white border border-[#e5e8e1] rounded-[11px] p-1 gap-1">
+            <button
+              type="button"
+              @click="statusFilter = 'PENDING'"
+              class="h-[32px] px-3 rounded-[8px] text-xs font-semibold transition cursor-pointer"
+              :class="
+                statusFilter === 'PENDING'
+                  ? 'bg-[#171918] text-white'
+                  : 'text-[#686f6a] hover:text-[#171918]'
+              "
+            >
+              Függőben (PENDING)
+            </button>
+            <button
+              type="button"
+              @click="statusFilter = 'ALL'"
+              class="h-[32px] px-3 rounded-[8px] text-xs font-semibold transition cursor-pointer"
+              :class="
+                statusFilter === 'ALL'
+                  ? 'bg-[#171918] text-white'
+                  : 'text-[#686f6a] hover:text-[#171918]'
+              "
+            >
+              Összes
+            </button>
+          </div>
+
+          <div class="relative flex-1 min-w-[220px] max-w-sm">
+            <i class="pi pi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-[#686f6a] text-xs"></i>
+            <input
+              v-model="searchInput"
+              type="text"
+              placeholder="Termék, SKU, vonalkód, pozíció vagy ok..."
+              @keydown.enter.prevent="triggerImmediateSearch"
+              class="w-full h-[38px] bg-white border border-white rounded-[10px] pl-9 pr-3 text-[12px] text-[#171918] placeholder-[#686f6a] outline-none focus:border-[#f46714]/40 transition"
+            />
+          </div>
         </div>
 
         <div class="flex items-center gap-3">

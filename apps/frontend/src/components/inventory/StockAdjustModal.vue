@@ -6,6 +6,7 @@ import type { LocationItem } from '@/api/locations'
 import { productApi, type ProductListItem } from '@/api/products'
 import { stockApi, type StockItemEntry } from '@/api/stock'
 import { variantApi, type VariantBarcodeItem, type VariantItem } from '@/api/variants'
+import { matchesBarcodeOrSku } from '@/utils/barcodeScanner'
 import { extractApiError, getLocationPath, LOCATION_TYPE_META } from '@/utils/locationMeta'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
@@ -391,10 +392,8 @@ async function searchVariants(searchText: string, autoSelectExact = false) {
     void hydrateProductNames(res.data)
 
     if (autoSelectExact && trimmed && res.data.length > 0) {
-      const lower = trimmed.toLowerCase()
       const exactMatch =
-        res.data.find((v) => v.variantBarcodes?.some((b) => b.barcode === trimmed)) ??
-        res.data.find((v) => v.sku.toLowerCase() === lower) ??
+        res.data.find((v) => matchesBarcodeOrSku(trimmed, v.sku, v.variantBarcodes)) ??
         (res.data.length === 1 ? res.data[0] : undefined)
 
       if (exactMatch) {

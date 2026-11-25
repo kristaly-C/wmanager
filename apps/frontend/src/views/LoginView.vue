@@ -105,7 +105,30 @@ useQrBadgeScanner(async (qrToken) => {
             required
             fluid
             inputClass="!rounded-xl"
-          />
+          >
+            <template #unmaskicon="{ toggleCallback }">
+              <button
+                type="button"
+                @click="toggleCallback"
+                aria-label="Jelszó megjelenítése"
+                title="Jelszó megjelenítése"
+                class="p-password-toggle-mask-icon !bg-transparent !border-0 !p-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded cursor-pointer"
+              >
+                <i class="pi pi-eye" aria-hidden="true"></i>
+              </button>
+            </template>
+            <template #maskicon="{ toggleCallback }">
+              <button
+                type="button"
+                @click="toggleCallback"
+                aria-label="Jelszó elrejtése"
+                title="Jelszó elrejtése"
+                class="p-password-toggle-mask-icon !bg-transparent !border-0 !p-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded cursor-pointer"
+              >
+                <i class="pi pi-eye-slash" aria-hidden="true"></i>
+              </button>
+            </template>
+          </Password>
         </div>
 
         <Button

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { variantApi, type VariantBarcodeItem, type VariantItem } from '@/api/variants'
+import { normalizeScannedBarcode } from '@/utils/barcodeScanner'
 import { extractApiError } from '@/utils/locationMeta'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
@@ -64,7 +65,8 @@ watch(
 
 async function handleCreateBarcode() {
   if (!props.variant) return
-  const code = newBarcode.value.trim()
+  const code = normalizeScannedBarcode(newBarcode.value)
+  newBarcode.value = code
   if (!code) {
     toast.add({
       severity: 'error',
@@ -238,6 +240,7 @@ function closeModal() {
               type="text"
               required
               placeholder="Vonalkód (pl. 8059175287411) *"
+              @blur="newBarcode = normalizeScannedBarcode(newBarcode)"
               class="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 font-mono text-xs text-slate-900 outline-none focus:border-orange-500"
             />
           </div>
