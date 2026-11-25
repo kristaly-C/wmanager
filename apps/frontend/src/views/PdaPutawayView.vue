@@ -24,6 +24,12 @@ import {
   type QueuedPutawayItem,
 } from '@/composables/useOfflinePutawayQueue'
 import { useAuthStore } from '@/stores/auth'
+import {
+  getBarcodeCandidates,
+  matchesBarcodeExact,
+  matchesBarcodeOrSku,
+  normalizeScannedBarcode,
+} from '@/utils/barcodeScanner'
 import { formatDateTime } from '@/utils/formatters'
 import {
   extractApiError,
@@ -276,7 +282,10 @@ const expectedItemOptions = computed<ExpectedItemOption[]>(() => {
     const productName = getItemProductName(item)
     const attrs = formatVariantAttributes(item)
     const remaining = Math.max(0, item.expectedQuantity - item.receivedQuantity)
-    const barcodes = (item.variant.variantBarcodes ?? []).map((b) => b.barcode).join(' ')
+    const barcodes = (item.variant.variantBarcodes ?? [])
+      .flatMap((b) => getBarcodeCandidates(b.barcode))
+      .join(' ')
+    const skuCandidates = getBarcodeCandidates(item.variant.sku).join(' ')
     return {
       variantId: item.variantId,
       label: attrs ? `${productName} (${attrs})` : productName,
@@ -289,7 +298,7 @@ const expectedItemOptions = computed<ExpectedItemOption[]>(() => {
       isUnexpected: item.isUnexpected,
       expectedLocationId: item.expectedLocationId ?? null,
       expectedLocationName: item.expectedLocation?.name ?? null,
-      searchText: `${productName} ${item.variant.sku} ${attrs} ${barcodes}`.toLowerCase(),
+      searchText: `${productName} ${item.variant.sku} ${skuCandidates} ${attrs} ${barcodes}`.toLowerCase(),
     }
   })
 })
@@ -304,15 +313,18 @@ const matchedReceiptItem = computed<GoodsReceiptItemDto | null>(() => {
 
   const code = productScanInput.value.trim()
   if (!code) return null
-  const lower = code.toLowerCase()
 
-  // Először pontos vonalkód egyezés, majd kis/nagybetű független SKU egyezés
+  // Először pontos vonalkód egyezés, majd SKU / szkenner-normalizált egyezés
   const byBarcode = receipt.value.items.find((item) =>
-    (item.variant.variantBarcodes ?? []).some((b) => b.barcode.toLowerCase() === lower),
+    matchesBarcodeExact(code, item.variant.variantBarcodes),
   )
   if (byBarcode) return byBarcode
 
-  return receipt.value.items.find((item) => item.variant.sku.toLowerCase() === lower) ?? null
+  return (
+    receipt.value.items.find((item) =>
+      matchesBarcodeOrSku(code, item.variant.sku, item.variant.variantBarcodes),
+    ) ?? null
+  )
 })
 
 // Célpolc azonosítása a szkennelt inputból vagy a lenyíló választóból
@@ -661,8 +673,9 @@ function buildPutawayRequest(): {
       payload.variantId = matched.variantId
       productLabel = `${getItemProductName(matched)} (${matched.variant.sku})`
     } else {
-      payload.barcode = scannedCode
-      productLabel = `Vonalkód/SKU: ${scannedCode}`
+      const normalizedCode = normalizeScannedBarcode(scannedCode)
+      payload.barcode = normalizedCode
+      productLabel = `Vonalkód/SKU: ${normalizedCode}`
     }
   } else {
     return null

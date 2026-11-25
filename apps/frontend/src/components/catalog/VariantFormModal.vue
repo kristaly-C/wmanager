@@ -5,6 +5,7 @@ import {
   type BulkVariantItemPayload,
   type VariantItem,
 } from '@/api/variants'
+import { normalizeScannedBarcode } from '@/utils/barcodeScanner'
 import { extractApiError } from '@/utils/locationMeta'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
@@ -549,22 +550,23 @@ async function handleSubmit() {
 
     saving.value = true
     try {
-      const items: BulkVariantItemPayload[] = previewRows.value.map((row) => ({
-        sku: row.sku.trim(),
-        colors: [...form.value.colors],
-        size: row.size.trim() || undefined,
-        weight,
-        netWeight,
-        volume,
-        costPrice,
-        netPrice,
-        grossPrice,
-        imageUrls: form.value.imageUrls.length > 0 ? [...form.value.imageUrls] : undefined,
-        isActive: form.value.isActive,
-        ...(row.primaryBarcode.trim()
-          ? { primaryBarcode: row.primaryBarcode.trim() }
-          : {}),
-      }))
+      const items: BulkVariantItemPayload[] = previewRows.value.map((row) => {
+        const normalizedBarcode = normalizeScannedBarcode(row.primaryBarcode)
+        return {
+          sku: row.sku.trim(),
+          colors: [...form.value.colors],
+          size: row.size.trim() || undefined,
+          weight,
+          netWeight,
+          volume,
+          costPrice,
+          netPrice,
+          grossPrice,
+          imageUrls: form.value.imageUrls.length > 0 ? [...form.value.imageUrls] : undefined,
+          isActive: form.value.isActive,
+          ...(normalizedBarcode ? { primaryBarcode: normalizedBarcode } : {}),
+        }
+      })
 
       const res = await variantApi.bulkCreate({
         productId: props.productId,
@@ -1587,6 +1589,7 @@ async function handleSubmit() {
                     type="text"
                     maxlength="100"
                     placeholder="Vonalkód / EAN (opcionális)"
+                    @blur="row.primaryBarcode = normalizeScannedBarcode(row.primaryBarcode)"
                     @keydown.enter.prevent
                     class="w-full h-9 rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-800 outline-none focus:border-orange-500"
                   />

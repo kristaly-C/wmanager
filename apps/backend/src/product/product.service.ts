@@ -1,5 +1,10 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { BaseService } from "../common/base.service";
+import {
+    buildVariantBarcodeOrClauses,
+    buildVariantSkuOrClauses,
+    buildVariantSupplierSkuOrClauses,
+} from "../common/barcode-search";
 import { PrismaService } from "../prisma/prisma.service";
 
 export interface FindProductsOptions {
@@ -72,17 +77,9 @@ export class ProductService extends BaseService<PrismaService['product']> {
                               variants: {
                                   some: {
                                       OR: [
-                                          { sku: { contains: q, mode: 'insensitive' as const } },
-                                          {
-                                              variantBarcodes: {
-                                                  some: {
-                                                      barcode: {
-                                                          contains: q,
-                                                          mode: 'insensitive' as const,
-                                                      },
-                                                  },
-                                              },
-                                          },
+                                          ...buildVariantSkuOrClauses(q),
+                                          ...buildVariantBarcodeOrClauses(q),
+                                          ...buildVariantSupplierSkuOrClauses(q),
                                       ],
                                   },
                               },

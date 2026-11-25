@@ -7,6 +7,12 @@ import {
 } from '@nestjs/common';
 import { AuthUser } from '../auth/decorators/current-user.decorator';
 import {
+    buildVariantBarcodeOrClauses,
+    buildVariantSkuOrClauses,
+    buildVariantSupplierSkuOrClauses,
+    getBarcodeSearchVariants,
+} from '../common/barcode-search';
+import {
     canSeeCostPrice,
     excludeCostFields,
     excludeCostPrice,
@@ -88,7 +94,15 @@ export class GoodsReceiptService {
                               items: {
                                   some: {
                                       OR: [
-                                          { variant: { sku: { contains: q, mode: 'insensitive' } } },
+                                          ...buildVariantSkuOrClauses(q).map((clause) => ({
+                                              variant: clause,
+                                          })),
+                                          ...buildVariantBarcodeOrClauses(q).map((clause) => ({
+                                              variant: clause,
+                                          })),
+                                          ...buildVariantSupplierSkuOrClauses(q).map((clause) => ({
+                                              variant: clause,
+                                          })),
                                           {
                                               variant: {
                                                   product: { name: { contains: q, mode: 'insensitive' } },
@@ -1155,15 +1169,34 @@ export class GoodsReceiptService {
 
         if (dto.barcode?.trim()) {
             const code = dto.barcode.trim();
-            const barcodeRecord = await this.prisma.variantBarcode.findUnique({
-                where: { barcode: code },
+            const candidates = getBarcodeSearchVariants(code);
+
+            const exactBarcodeRecord = await this.prisma.variantBarcode.findFirst({
+                where: { barcode: { in: candidates } },
                 include: { variant: true },
             });
-            if (barcodeRecord?.variant) {
-                return barcodeRecord.variant;
+            if (exactBarcodeRecord?.variant) {
+                return exactBarcodeRecord.variant;
             }
+
+            const insensitiveBarcodeRecord = await this.prisma.variantBarcode.findFirst({
+                where: {
+                    OR: candidates.map((candidate) => ({
+                        barcode: { equals: candidate, mode: 'insensitive' as const },
+                    })),
+                },
+                include: { variant: true },
+            });
+            if (insensitiveBarcodeRecord?.variant) {
+                return insensitiveBarcodeRecord.variant;
+            }
+
             const bySkuFallback = await this.prisma.variant.findFirst({
-                where: { sku: { equals: code, mode: 'insensitive' } },
+                where: {
+                    OR: candidates.map((candidate) => ({
+                        sku: { equals: candidate, mode: 'insensitive' as const },
+                    })),
+                },
             });
             if (bySkuFallback) {
                 return bySkuFallback;
@@ -1172,13 +1205,31 @@ export class GoodsReceiptService {
         }
 
         const sku = dto.sku!.trim();
+        const skuCandidates = getBarcodeSearchVariants(sku);
         const variant = await this.prisma.variant.findFirst({
-            where: { sku: { equals: sku, mode: 'insensitive' } },
+            where: {
+                OR: skuCandidates.map((candidate) => ({
+                    sku: { equals: candidate, mode: 'insensitive' as const },
+                })),
+            },
         });
-        if (!variant) {
-            throw new NotFoundException(`Nem található termékvariáns ezzel a cikkszámmal (SKU): ${sku}`);
+        if (variant) {
+            return variant;
         }
-        return variant;
+
+        const barcodeFallback = await this.prisma.variantBarcode.findFirst({
+            where: {
+                OR: skuCandidates.map((candidate) => ({
+                    barcode: { equals: candidate, mode: 'insensitive' as const },
+                })),
+            },
+            include: { variant: true },
+        });
+        if (barcodeFallback?.variant) {
+            return barcodeFallback.variant;
+        }
+
+        throw new NotFoundException(`Nem található termékvariáns ezzel a cikkszámmal (SKU): ${sku}`);
     }
 
     private async resolveLocationForPutaway(

@@ -10,6 +10,7 @@ import {
 import { supplierApi, type SupplierItem } from '@/api/suppliers'
 import { variantApi, type VariantItem } from '@/api/variants'
 import { variantSuppliersApi, type VariantSupplierItem } from '@/api/variantSuppliers'
+import { matchesBarcodeOrSku } from '@/utils/barcodeScanner'
 import { extractApiError } from '@/utils/locationMeta'
 import { formatCurrency } from '@/utils/procurementMeta'
 
@@ -257,14 +258,28 @@ watch(variantSearch, (val) => {
   }, 300)
 })
 
-async function fetchVariants(query: string) {
+async function fetchVariants(query: string, autoAddExact = false) {
   const seq = ++latestVariantSearchSeq
+  const trimmed = query.trim()
   loadingVariants.value = true
   try {
-    const res = await variantApi.getAll({ search: query, take: 20 })
+    const res = await variantApi.getAll({ search: trimmed || undefined, take: 20 })
     if (seq !== latestVariantSearchSeq) return
     variantResults.value = res.data
     showVariantDropdown.value = true
+
+    if (autoAddExact && trimmed && res.data.length > 0) {
+      const exactMatch =
+        res.data.find((v) => matchesBarcodeOrSku(trimmed, v.sku, v.variantBarcodes)) ??
+        (res.data.length === 1 ? res.data[0] : undefined)
+
+      if (exactMatch) {
+        addVariantRow(exactMatch)
+        if (addedVariantIds.value.has(exactMatch.id)) {
+          variantSearch.value = ''
+        }
+      }
+    }
   } catch (err) {
     if (seq !== latestVariantSearchSeq) return
     toast.add({
@@ -278,6 +293,13 @@ async function fetchVariants(query: string) {
       loadingVariants.value = false
     }
   }
+}
+
+function triggerImmediateVariantSearch() {
+  if (variantSearchTimer) clearTimeout(variantSearchTimer)
+  const trimmed = variantSearch.value.trim()
+  if (!trimmed) return
+  void fetchVariants(trimmed, true)
 }
 
 function addVariantRow(variant: VariantItem) {
@@ -510,6 +532,7 @@ onBeforeUnmount(() => {
             type="text"
             placeholder="Kezdj el gépelni pl. SKU-t, terméknevet vagy vonalkódot..."
             @focus="showVariantDropdown = variantResults.length > 0"
+            @keydown.enter.prevent="triggerImmediateVariantSearch"
             class="w-full h-10 bg-white rounded-xl border border-[#dce0d8] pl-9 pr-10 text-sm outline-none focus:border-[#f46714]"
           />
           <i

@@ -161,7 +161,7 @@ export const stockApi = {
     apiClient.get<StockSettingsResponse>('/stock/settings'),
   updateSettings: (data: { initialStockEnabled: boolean }) =>
     apiClient.patch<StockSettingsResponse>('/stock/settings', data),
-  getReports: (params?: { status?: StockReportStatusType; locationId?: string }) =>
+  getReports: (params?: { status?: StockReportStatusType; locationId?: string; search?: string }) =>
     apiClient.get<StockReportEntry[]>('/stock/reports', { params }),
   createReport: (data: CreateStockReportPayload) =>
     apiClient.post<StockReportEntry>('/stock/reports', data),

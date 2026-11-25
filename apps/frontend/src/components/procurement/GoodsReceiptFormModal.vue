@@ -11,6 +11,7 @@ import type { LocationItem } from '@/api/locations'
 import type { PurchaseOrderDetail } from '@/api/purchaseOrders'
 import { supplierApi, type SupplierItem } from '@/api/suppliers'
 import { variantApi, type VariantItem } from '@/api/variants'
+import { matchesBarcodeOrSku } from '@/utils/barcodeScanner'
 import { extractApiError, getLocationPath, LOCATION_TYPE_META } from '@/utils/locationMeta'
 import { formatCurrency } from '@/utils/procurementMeta'
 import Dialog from 'primevue/dialog'
@@ -182,16 +183,33 @@ async function loadSuppliers() {
   }
 }
 
-async function searchVariants(query: string) {
+function getPrimaryBarcode(variant: VariantItem): string | null {
+  const list = variant.variantBarcodes ?? []
+  return (list.find((b) => b.isPrimary) ?? list[0])?.barcode ?? null
+}
+
+async function searchVariants(query: string, autoAddExact = false) {
   const seq = ++latestVariantSeq
+  const trimmed = query.trim()
   loadingVariants.value = true
   try {
     const res = await variantApi.getAll({
-      search: query.trim() || undefined,
+      search: trimmed || undefined,
       take: 20,
     })
     if (seq !== latestVariantSeq) return
     variantResults.value = res.data
+
+    if (autoAddExact && trimmed && res.data.length > 0) {
+      const exactMatch =
+        res.data.find((v) => matchesBarcodeOrSku(trimmed, v.sku, v.variantBarcodes)) ??
+        (res.data.length === 1 ? res.data[0] : undefined)
+
+      if (exactMatch) {
+        addVariantRow(exactMatch)
+        variantSearchInput.value = ''
+      }
+    }
   } catch (err) {
     if (seq !== latestVariantSeq) return
     toast.add({
@@ -209,7 +227,7 @@ async function searchVariants(query: string) {
 
 function triggerImmediateVariantSearch() {
   if (variantSearchTimer) clearTimeout(variantSearchTimer)
-  void searchVariants(variantSearchInput.value)
+  void searchVariants(variantSearchInput.value, true)
 }
 
 function addVariantRow(variant: VariantItem) {
@@ -606,6 +624,9 @@ onBeforeUnmount(() => {
                   {{ variant.size }}
                 </span>
                 <span v-if="variant.colors.length > 0">{{ variant.colors.join(', ') }}</span>
+                <span v-if="getPrimaryBarcode(variant)" class="font-mono">
+                  · {{ getPrimaryBarcode(variant) }}
+                </span>
               </div>
             </div>
 

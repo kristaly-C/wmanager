@@ -22,6 +22,7 @@ import type { PurchaseOrderDetail } from '@/api/purchaseOrders'
 import { variantApi, type VariantItem } from '@/api/variants'
 import { isNetworkError } from '@/composables/useOfflinePutawayQueue'
 import { formatDateTime, formatSignedQuantity } from '@/utils/formatters'
+import { getBarcodeCandidates, normalizeScannedBarcode } from '@/utils/barcodeScanner'
 import { extractApiError, getLocationPath, LOCATION_TYPE_META } from '@/utils/locationMeta'
 import {
   canSeeCostPrice,
@@ -347,11 +348,16 @@ const putawayItemOptions = computed(() => {
       const productName = item.variant.product?.name ?? 'Ismeretlen termék'
       const sizeStr = item.variant.size ? ` · ${item.variant.size}` : ''
       const remaining = Math.max(0, item.expectedQuantity - item.receivedQuantity)
+      const barcodes = (item.variant.variantBarcodes ?? [])
+        .flatMap((b) => getBarcodeCandidates(b.barcode))
+        .join(' ')
+      const skuCandidates = getBarcodeCandidates(item.variant.sku).join(' ')
       return {
         variantId: item.variantId,
         expectedLocationId: item.expectedLocationId ?? null,
         remaining,
         label: `${item.variant.sku} — ${productName}${sizeStr} (${item.receivedQuantity}/${item.expectedQuantity} db)`,
+        searchText: `${item.variant.sku} ${skuCandidates} ${productName} ${sizeStr} ${barcodes}`.toLowerCase(),
       }
     })
 })
@@ -703,7 +709,7 @@ async function handlePcPutaway() {
     return
   }
 
-  const trimmedCode = putawayCodeInput.value.trim()
+  const trimmedCode = normalizeScannedBarcode(putawayCodeInput.value)
   const chosenVariantId = putawaySelectedVariantId.value
 
   if (!chosenVariantId && !trimmedCode) {
@@ -1169,7 +1175,7 @@ onBeforeUnmount(() => {
             <input
               v-model="searchInput"
               type="text"
-              placeholder="Bizonylatszám, számlaszám, PO, beszállító vagy SKU..."
+              placeholder="Bizonylatszám, számlaszám, PO, beszállító, SKU vagy vonalkód..."
               @keydown.enter.prevent="triggerImmediateSearch"
               class="w-full h-[38px] bg-white border border-[#e5e8e2] rounded-[10px] pl-9 pr-3 text-[12px] text-[#171918] placeholder-[#686f6a] outline-none focus:border-[#f46714]/50 transition"
             />
@@ -1628,6 +1634,7 @@ onBeforeUnmount(() => {
               :options="putawayItemOptions"
               optionLabel="label"
               optionValue="variantId"
+              :filterFields="['label', 'searchText']"
               placeholder="Válassz a bevételezés tételeiből..."
               filter
               showClear

@@ -8,6 +8,12 @@ import { UpdateStockSettingsDto } from "./dto/update-stock-settings.dto";
 import { CreateStockReportDto } from "./dto/create-stock-report.dto";
 import { ResolveStockReportDto } from "./dto/resolve-stock-report.dto";
 import { LocationType, SlotMode, MovementType, Role, StockReportStatus } from "../generated/prisma/enums";
+import {
+    buildVariantBarcodeOrClauses,
+    buildVariantSkuOrClauses,
+    buildVariantSupplierSkuOrClauses,
+    getBarcodeSearchVariants,
+} from "../common/barcode-search";
 import { canSeeCostPrice, excludeCostPrice, excludeUnitCostHuf } from "../common/cost-price";
 
 const INITIAL_STOCK_SETTING_KEY = 'initialStockEnabled';
@@ -142,8 +148,7 @@ export class StockService {
 
         let scoped = this.locationAccesService.scopeStockItems(rawItems, scope, (root) => root);
         if (q) {
-            const qLower = q.toLowerCase();
-            scoped = scoped.filter((item) => this.matchesStockSearch(item, qLower));
+            scoped = scoped.filter((item) => this.matchesStockSearch(item, q));
         }
         scoped.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
@@ -174,9 +179,7 @@ export class StockService {
                       OR: [
                           { note: { contains: q, mode: 'insensitive' as const } },
                           { location: { name: { contains: q, mode: 'insensitive' as const } } },
-                          { variant: { sku: { contains: q, mode: 'insensitive' as const } } },
-                          { variant: { product: { name: { contains: q, mode: 'insensitive' as const } } } },
-                          { variant: { product: { manufacturerCode: { contains: q, mode: 'insensitive' as const } } } },
+                          ...this.buildVariantSearchClauses(q),
                       ],
                   }
                 : {}),
@@ -186,7 +189,14 @@ export class StockService {
                 where,
                 include: {
                     location: true,
-                    variant: { include: { product: true } },
+                    variant: {
+                        include: {
+                            product: true,
+                            variantBarcodes: {
+                                orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+                            },
+                        },
+                    },
                     createdByUser: { select: { id: true, name: true, email: true, role: true } },
                 },
                 ...(options?.skip !== undefined ? { skip: options.skip } : {}),
@@ -491,7 +501,7 @@ export class StockService {
 
     async findReports(
         user: AuthUser,
-        options?: { status?: StockReportStatus; locationId?: string },
+        options?: { status?: StockReportStatus; locationId?: string; search?: string },
     ) {
         if (options?.locationId) {
             await this.locationAccesService.assertCanAccess(user, options.locationId);
@@ -500,10 +510,21 @@ export class StockService {
             ? this.buildSubtreeLocationWhere(options.locationId)
             : await this.locationAccesService.accessibleWhere(user);
 
+        const q = options?.search?.trim();
+
         const reports = await this.prisma.stockReport.findMany({
             where: {
                 location: locationWhere,
                 ...(options?.status ? { status: options.status } : {}),
+                ...(q
+                    ? {
+                          OR: [
+                              { reason: { contains: q, mode: 'insensitive' as const } },
+                              { location: { name: { contains: q, mode: 'insensitive' as const } } },
+                              ...this.buildVariantSearchClauses(q),
+                          ],
+                      }
+                    : {}),
             },
             include: this.reportInclude,
             orderBy: { createdAt: 'desc' },
@@ -704,17 +725,12 @@ export class StockService {
 
     private buildVariantSearchClauses(q: string) {
         return [
-            { variant: { sku: { contains: q, mode: 'insensitive' as const } } },
+            ...buildVariantSkuOrClauses(q).map((clause) => ({ variant: clause })),
+            ...buildVariantBarcodeOrClauses(q).map((clause) => ({ variant: clause })),
+            ...buildVariantSupplierSkuOrClauses(q).map((clause) => ({ variant: clause })),
             { variant: { size: { contains: q, mode: 'insensitive' as const } } },
             { variant: { product: { name: { contains: q, mode: 'insensitive' as const } } } },
             { variant: { product: { manufacturerCode: { contains: q, mode: 'insensitive' as const } } } },
-            {
-                variant: {
-                    variantBarcodes: {
-                        some: { barcode: { contains: q, mode: 'insensitive' as const } },
-                    },
-                },
-            },
         ];
     }
 
@@ -735,15 +751,22 @@ export class StockService {
                 variantBarcodes: Array<{ barcode: string }>;
             };
         },
-        qLower: string,
+        rawQuery: string,
     ): boolean {
+        const qLower = rawQuery.toLowerCase();
+        const codeCandidates = getBarcodeSearchVariants(rawQuery).map((v) => v.toLowerCase());
         return (
             item.location.name.toLowerCase().includes(qLower) ||
-            item.variant.sku.toLowerCase().includes(qLower) ||
             (item.variant.size ?? '').toLowerCase().includes(qLower) ||
             item.variant.product.name.toLowerCase().includes(qLower) ||
             (item.variant.product.manufacturerCode ?? '').toLowerCase().includes(qLower) ||
-            item.variant.variantBarcodes.some((b) => b.barcode.toLowerCase().includes(qLower))
+            codeCandidates.some(
+                (candidate) =>
+                    item.variant.sku.toLowerCase().includes(candidate) ||
+                    item.variant.variantBarcodes.some((b) =>
+                        b.barcode.toLowerCase().includes(candidate),
+                    ),
+            )
         );
     }
 

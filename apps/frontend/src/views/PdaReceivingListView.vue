@@ -9,6 +9,7 @@ import {
   useOfflinePutawayQueue,
 } from '@/composables/useOfflinePutawayQueue'
 import { GOODS_RECEIPT_STATUS_META } from '@/utils/procurementMeta'
+import { getBarcodeCandidates } from '@/utils/barcodeScanner'
 import { extractApiError } from '@/utils/locationMeta'
 import { formatDateTime } from '@/utils/formatters'
 
@@ -23,6 +24,7 @@ interface PdaReceiptCardItem {
   totalReceived: number
   totalExpected: number
   itemCount: number
+  itemSearchText?: string
   createdAt: string
   updatedAt: string
 }
@@ -101,6 +103,13 @@ function saveCachedReceipts(items: PdaReceiptCardItem[]): void {
 function toCardItem(dto: GoodsReceiptListItem): PdaReceiptCardItem {
   const totalReceived = dto.items.reduce((sum, item) => sum + item.receivedQuantity, 0)
   const totalExpected = dto.items.reduce((sum, item) => sum + item.expectedQuantity, 0)
+  const itemSearchText = dto.items
+    .map((item) => {
+      const barcodes = (item.variant.variantBarcodes ?? []).map((b) => b.barcode).join(' ')
+      return `${item.variant.sku} ${item.variant.product?.name ?? ''} ${barcodes}`
+    })
+    .join(' ')
+    .toLowerCase()
   return {
     id: dto.id,
     receiptNumber: dto.receiptNumber,
@@ -112,6 +121,7 @@ function toCardItem(dto: GoodsReceiptListItem): PdaReceiptCardItem {
     totalReceived,
     totalExpected,
     itemCount: dto.items.length,
+    itemSearchText,
     createdAt: dto.createdAt,
     updatedAt: dto.updatedAt,
   }
@@ -127,17 +137,21 @@ function sortCards(items: PdaReceiptCardItem[]): PdaReceiptCardItem[] {
 }
 
 const displayedReceipts = computed<PdaReceiptCardItem[]>(() => {
-  const q = debouncedSearch.value.trim().toLowerCase()
-  if (!usingCachedData.value || !q) {
+  const rawSearch = debouncedSearch.value.trim()
+  if (!usingCachedData.value || !rawSearch) {
     return receipts.value
   }
+  const q = rawSearch.toLowerCase()
+  const barcodeCandidates = getBarcodeCandidates(rawSearch).map((c) => c.toLowerCase())
   return receipts.value.filter((item) => {
+    const itemText = item.itemSearchText ?? ''
     return (
       item.receiptNumber.toLowerCase().includes(q) ||
       (item.invoiceNumber?.toLowerCase().includes(q) ?? false) ||
       (item.supplierName?.toLowerCase().includes(q) ?? false) ||
       item.targetLocationName.toLowerCase().includes(q) ||
-      (item.purchaseOrderNumber?.toLowerCase().includes(q) ?? false)
+      (item.purchaseOrderNumber?.toLowerCase().includes(q) ?? false) ||
+      barcodeCandidates.some((candidate) => itemText.includes(candidate))
     )
   })
 })
@@ -502,7 +516,7 @@ onBeforeUnmount(() => {
       <input
         v-model="searchInput"
         type="text"
-        placeholder="Keresés: bizonylatszám, számla, beszállító..."
+        placeholder="Keresés: bizonylatszám, számla, beszállító, SKU, vonalkód..."
         @keydown.enter.prevent="triggerImmediateSearch"
         class="w-full min-h-[48px] bg-white border border-slate-200 rounded-2xl pl-10 pr-10 text-sm text-slate-900 placeholder-slate-400 shadow-2xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
       />

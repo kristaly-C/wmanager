@@ -9,6 +9,7 @@ import {
 } from '@/stores/search'
 import { variantApi, type VariantItem } from '@/api/variants'
 import { locationApi, type LocationItem } from '@/api/locations'
+import { matchesBarcodeExact } from '@/utils/barcodeScanner'
 import { extractApiError, getLocationPath } from '@/utils/locationMeta'
 import StockReportModal from '@/components/inventory/StockReportModal.vue'
 import Dialog from 'primevue/dialog'
@@ -187,7 +188,7 @@ async function fetchVariants(query: string, openOnEnter = false) {
 
     if (openOnEnter && trimmed && res.data.length > 0) {
       const exactBarcodeIdx = res.data.findIndex((v) =>
-        v.variantBarcodes?.some((b) => b.barcode === trimmed),
+        matchesBarcodeExact(trimmed, v.variantBarcodes),
       )
       if (exactBarcodeIdx >= 0) {
         selectedIndex.value = exactBarcodeIdx
@@ -287,6 +288,11 @@ watch(
     if (!isOpen || !productId) {
       if (!isOpen) {
         rawSiblingVariants.value = []
+        if (wasOpen && searchStore.isSearchOpen) {
+          void nextTick(() => {
+            searchInput.value?.focus()
+          })
+        }
       }
       return
     }
@@ -296,6 +302,13 @@ watch(
     }
   },
 )
+
+function clearSearch() {
+  searchQuery.value = ''
+  void nextTick(() => {
+    searchInput.value?.focus()
+  })
+}
 
 // SKU másolása vágólapra (HTTP / nem-HTTPS környezetben is működő fallbackkel)
 async function copySku(sku: string) {
@@ -346,9 +359,6 @@ function handleKeydown(e: KeyboardEvent) {
     if (searchStore.isProductSheetOpen) {
       e.preventDefault()
       searchStore.closeProductSheet()
-      void nextTick(() => {
-        searchInput.value?.focus()
-      })
       return
     }
     if (searchStore.isSearchOpen) {
@@ -452,7 +462,7 @@ onUnmounted(() => {
         <button
           v-if="searchQuery"
           type="button"
-          @click="searchQuery = ''"
+          @click="clearSearch"
           class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
           title="Keresés törlése"
         >

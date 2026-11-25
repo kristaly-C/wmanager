@@ -101,8 +101,13 @@ export class StockController{
         @CurrentUser() user: AuthUser,
         @Query('status', new ParseEnumPipe(StockReportStatus, { optional: true })) status?: StockReportStatus,
         @Query('locationId') locationId?: string,
+        @Query('search') search?: string,
     ) {
-        return this.stockService.findReports(user, { status, locationId: locationId?.trim() || undefined });
+        return this.stockService.findReports(user, {
+            status,
+            locationId: locationId?.trim() || undefined,
+            search: search?.trim() || undefined,
+        });
     }
 
     @Roles(

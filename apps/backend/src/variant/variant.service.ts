@@ -2,6 +2,11 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { BaseService } from "../common/base.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuthUser } from "../auth/decorators/current-user.decorator";
+import {
+    buildVariantBarcodeOrClauses,
+    buildVariantSkuOrClauses,
+    buildVariantSupplierSkuOrClauses,
+} from "../common/barcode-search";
 import { canSeeCostPrice, excludeCostPrice } from "../common/cost-price";
 import { BulkCreateVariantsDto } from "./dto/bulk-create-variants.dto";
 import { LocationAccessService, LocationScopeContext } from "../location/location-access.service";
@@ -98,12 +103,9 @@ export class VariantService extends BaseService<PrismaService['variant']> {
                 ...(q
                     ? {
                           OR: [
-                              { sku: { contains: q, mode: 'insensitive' } },
-                              {
-                                  variantBarcodes: {
-                                      some: { barcode: { contains: q, mode: 'insensitive' } },
-                                  },
-                              },
+                              ...buildVariantSkuOrClauses(q),
+                              ...buildVariantBarcodeOrClauses(q),
+                              ...buildVariantSupplierSkuOrClauses(q),
                               { product: { name: { contains: q, mode: 'insensitive' } } },
                               { product: { manufacturerCode: { contains: q, mode: 'insensitive' } } },
                               { product: { model: { contains: q, mode: 'insensitive' } } },
