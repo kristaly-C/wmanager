@@ -2,18 +2,19 @@
 
 > Ez a dokumentum az MVP (Minimum Viable Product) fejlesztési sorrendjét és aktuális készültségi állapotát követi nyomon. Minden lezárt részfeladatnál pipáld ki (`[x]`) az adott sort, és frissítsd az „Aktuális fókusz” részt.
 >
-> Utolsó frissítés: 2026-11-21
+> Utolsó frissítés: 2026-11-28
 
 ---
 
 ## Aktuális fókusz
 
-- **Következő lépés:** **3/B. Bevételezés beérkezett áruhoz (PurchaseOrder)** (Prisma séma-bővítés `PurchaseOrderItem`-mel, shared-types, backend modul és frontend bevételezés nézet)
+- **Aktuális állapot:** Az **1–4. Mérföldkő** (Lokációk, Katalógus & Variánsok, Készlet & Bevételezés, valamint Omnichannel Rendeléskezelés & Zónás Kiszedés) teljes egészében elkészült PC és PDA felületen is.
+- **Következő lépés:** **5. fázis – Leltár UI (`/stocktakes`), Lokációk közti transzferek (`/transfers`) és Visszáru / RMA (`/returns`)**
 - **MVP célok röviden:**
-  1. Raktár és pozíciók (`WAREHOUSE` / `STORE` → `ZONE` → `SHELF` → `BIN`) könnyű létrehozása és kezelése.
-  2. Termékek, variánsok és vonalkódok kezelése.
-  3. Termékek felvitele pozíció szerint, valamint bevételezés létrehozása beérkezett áruhoz.
-  4. Rendelés felvétele a saját raktárkészletünkre (foglalással és kiadással).
+  1. [x] Raktár és pozíciók (`WAREHOUSE` / `STORE` → `ZONE` → `SHELF` → `BIN`) könnyű létrehozása és kezelése.
+  2. [x] Termékek, variánsok és vonalkódok kezelése.
+  3. [x] Termékek felvitele pozíció szerint, valamint bevételezés létrehozása beérkezett áruhoz.
+  4. [x] Rendelés felvétele a saját raktárkészletünkre (foglalással, zónás kiszedéssel és kiadással).
 
 ---
 
@@ -92,28 +93,33 @@
 - [x] BOSS / ADMIN nyitókészlet-felvitel kapcsoló (`SystemSetting.initialStockEnabled`, `GET/PATCH /stock/settings`, backend tiltás ha inaktív, és vezérlőpulti toggle kártya a `DashboardView.vue`-ban)
 - [x] Polckészlet hiány és eltérés-jelentés (`StockReport` modell, `POST /stock/reports`, vezetői elbírálás `resolveReport` atomi készlet- és mozgásszinkronnal, `InventoryView.vue` 4. fül jelvénnyel, `F5` gyorsjelentés a `GlobalProductSearch.vue`-ban, és vezérlőpulti widget)
 
-### 3/B. Bevételezés beérkezett áruhoz (`PurchaseOrder`)
-> **Elkerülhetetlen séma-bővítés:** a `prisma/schema.prisma`-ban a `PurchaseOrder` jelenleg csak fejléc (`supplierId`, `status`), még nincs hozzá `PurchaseOrderItem` tábla és NestJS modul.
-- [ ] **`VariantSupplier` kapcsolótábla és API:** több beszállító per variáns (`supplierSku`, idegen nyelvű `supplierProductName`, devizás beszerzési ár `purchasePrice` + `currency`, beszállítói kedvezmény `%`, rendelési egység `orderUnit`, `isPrimary` jelző)
-- [ ] Prisma séma bővítése: `PurchaseOrderItem` (`purchaseOrderId`, `variantId`, `orderedQuantity`, `receivedQuantity`, opcionális egységár) + szükséges fejlécmezők (pl. bizonylatszám/szállítólevél szám, megjegyzés, célraktár) és migráció
-- [ ] `@wmanager/shared-types` bővítése a `PurchaseOrder`, `PurchaseOrderItem` és `VariantSupplier` típusokkal
-- [ ] Backend `PurchaseOrderModule` (`GET`, `POST`, `PATCH`, `POST :id/receive` – `$transaction`-ben pozíció(k)ra történő `StockItem` növeléssel és `PURCHASE_RECEIPT` típusú `StockMovement` rögzítéssel)
-- [ ] Frontend Bevételezés nézet (`/purchase-orders` vagy `/shipments` alatt): új bevételezés felvétele, tételek hozzáadása, beérkezett tételek pozícióra rakása és lezárása
+### 3/B. Bevételezés beérkezett áruhoz (`PurchaseOrder` & `GoodsReceipt`)
+> **Elkészült:** a `PurchaseOrderItem`, `GoodsReceipt`, `GoodsReceiptItem`, `VariantSupplier` és `VariantMonthlyStat` modellek, a backend modulok, a desktop bevételezési felület és a PDA elrakás (putaway) folyamat is megvalósult.
+- [x] **`VariantSupplier` kapcsolótábla és API:** több beszállító per variáns (`supplierSku`, idegen nyelvű `supplierProductName`, devizás beszerzési ár `purchasePrice` + `currency`, beszállítói kedvezmény `%`, rendelési egység `orderUnit`, `isPrimary` jelző)
+- [x] Prisma séma bővítése: `PurchaseOrderItem`, `GoodsReceipt`, `GoodsReceiptItem`, `VariantSupplier`, `VariantMonthlyStat` modellek, fejlécmezők (bizonylatszám/szállítólevél szám, deviza/árfolyam, megjegyzés, célraktár) és migráció
+- [x] `@wmanager/shared-types` bővítése a `PurchaseOrder`, `PurchaseOrderItem`, `GoodsReceipt`, `GoodsReceiptItem`, `VariantSupplier` és `VariantMonthlyStat` típusokkal
+- [x] Backend `PurchaseOrderModule` és `GoodsReceiptModule` (`GET`, `POST`, `PATCH`, bevételezés és PDA elrakás / putaway `$transaction`-ben pozíció(k)ra történő `StockItem` növeléssel, `PURCHASE_RECEIPT` típusú `StockMovement` rögzítéssel és `VariantMonthlyStat` frissítéssel)
+- [x] Frontend Bevételezés nézet (`/purchase-orders` és `/goods-receipts`) + PDA elrakás (putaway): új beszerzési rendelés és bevételezés felvétele, tételek hozzáadása, beérkezett tételek pozícióra rakása és lezárása
 
 ---
 
-## 4. Mérföldkő – Rendelés felvétele saját raktárkészletre
+## 4. Mérföldkő – Rendelés felvétele saját raktárkészletre és zónás kiszedés
 
-**Cél:** Vevői / bolti rendelések rögzítése a meglévő szabad készlet terhére, foglalással és teljesítéssel (kiadással).
+**Cél:** Vevői / bolti rendelések rögzítése a meglévő szabad készlet terhére, foglalással, IKEA-stílusú zónánkénti kiszedéssel és teljesítéssel (kiadással).
 
-> **Elkerülhetetlen séma-bővítés:** a `prisma/schema.prisma`-ban a `SalesOrder` jelenleg csak fejléc (`status`), még nincs hozzá `SalesOrderItem` tábla és NestJS modul.
-- [ ] Prisma séma bővítése: `SalesOrderItem` (`salesOrderId`, `variantId`, `quantity`) + rendelés fejlécmezők (rendelésszám, vevő neve/elérhetősége vagy forrás, forrás lokáció, megjegyzés) és migráció
-- [ ] `@wmanager/shared-types` bővítése a `SalesOrder` és `SalesOrderItem` típusokkal
-- [ ] Backend `SalesOrderModule`:
-  - [ ] Rendelés létrehozása `$transaction`-ben: szabad készlet (`quantity - reservedQuantity`) ellenőrzése és `reservedQuantity` növelése
-  - [ ] Rendelés teljesítése / kiadása: választott pozíció(k)ról `quantity` és `reservedQuantity` csökkentése + `SALE` típusú `StockMovement` létrehozása
-  - [ ] Rendelés lemondása: `reservedQuantity` felszabadítása
-- [ ] Frontend Rendelések nézet (`/orders`): rendelésfelvétel (elérhető készlet kijelzésével), rendeléslista, státuszkezelés (teljesítés / lemondás)
+> **Elkészült:** az omnichannel `SalesOrder` foglalási/feloldási motor, a 2-menetes zónás `PickTask` rendszer, a PC `/orders` és `/shipments` felületek, az offline-tűrő PDA `/pda/picking` munkamenet és az `/analytics` *Értékesítés & Árrés* fül is megvalósult.
+- [x] Prisma séma bővítése: `SalesOrder`, `SalesOrderItem`, `PickTask`, `PickTaskItem` modellek (`SalesChannel`, `SalesOrderStatus`, `PickTaskStatus`), egyedi rendelés- és feladatszámok, valamint migráció (`20261128101000_sales_orders_and_zone_picking`)
+- [x] `@wmanager/shared-types` bővítése a `SalesOrder`, `SalesOrderItem`, `PickTask`, `PickTaskItem` és kapcsolódó enum típusokkal
+- [x] Backend `SalesOrderModule` (`sales-order.controller.ts`, `sales-order.service.ts`, `pick-task.controller.ts`, `pick-task.service.ts`, `sales-reservation.ts`):
+  - [x] Omnichannel rendelés létrehozása `$transaction`-ben: telephelyi szabad készlet (`quantity - reservedQuantity`) ellenőrzése és `reservedQuantity` foglalása, készlethiány esetén automatikus `ON_HOLD` státusz
+  - [x] `ON_HOLD` feloldás és telephelyi készletmátrix (`GET /sales-orders/availability`, `reassign-location`, `request-transfer`, `recheck-stock`)
+  - [x] IKEA-stílusú 2-menetes zónás kiszedés (`PickTask`): zónákra bontott feladattábla, többes feladatfelvétel kocsi/láda (`toteCode`) szerint, egyesített járási sorrend (`GET /pick-tasks/my-route`), lerakópolc QR-hozzárendelés (`dropoffLocationId` / `dropoffCode`), azonnali hiányjelentés és `SALE` mozgás + `VariantMonthlyStat` értékesítési/ELÁBÉ frissítés
+  - [x] Rendelés teljesítése / kiadása (`complete`, `instantComplete` bolti azonnali kiadással), illetve lemondás (`cancel`) `reservedQuantity` felszabadítással és visszapótló korrekcióval
+  - [x] Variáns értékesítési előzmény és árrés végpont (`GET /sales-orders/variant-history/:variantId`)
+- [x] Frontend PC Rendelések nézet (`/orders` – `OrdersView.vue`, `OrderCreateModal.vue`, `OrderDetailDrawer.vue`): omnichannel rendelésfelvétel élő telephelyi szabadkészlettel, gyors vonalkód-bevitellel, `ON_HOLD` készletmátrix-feloldóval és átirányítással
+- [x] Frontend PC Raktár & Kiadás nézet (`/shipments` – `ShipmentsView.vue`): *Kiszállításra vár (`READY`)* és *Zónás kiszedési feladattábla (`PickTask`)* fülek valós idejű állapottal és kiadással
+- [x] Frontend PDA Kiszedés nézet (`/pda/picking` – `PdaPickingView.vue` + `useOfflinePickingQueue.ts`): többes zónafeladat felvétele kocsival/ládával, egyesített szedőkör járási sorrendben, lerakópolc QR-szkennelés és offline műveleti sor
+- [x] Elemzések (`/analytics` – `AnalyticsView.vue`): *Értékesítés & Árrés* fül KPI kártyákkal, havi bevétel/ELÁBÉ/árrés statisztikával és lapozott lezárt rendelési tételekkel
 
 ---
 

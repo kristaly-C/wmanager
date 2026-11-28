@@ -4,6 +4,7 @@ import { Role } from '@wmanager/shared-types'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import { useOfflinePutawayQueue } from '@/composables/useOfflinePutawayQueue'
+import { useOfflinePickingQueue } from '@/composables/useOfflinePickingQueue'
 
 interface PdaTask {
   id: string
@@ -28,9 +29,11 @@ const pdaTasks: PdaTask[] = [
   {
     id: 'picking',
     title: 'Rendelés Kiszedés (Picking)',
-    subtitle: 'Kiszedési lista polcról polcra',
+    subtitle: 'Zónás feladattábla, szedőkör és lerakópolc QR',
     icon: 'pi pi-shopping-bag',
     color: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    to: '/pda/picking',
+    allowedRoles: RECEIVING_ROLES,
   },
   {
     id: 'receiving',
@@ -60,7 +63,27 @@ const pdaTasks: PdaTask[] = [
 const router = useRouter()
 const authStore = useAuthStore()
 const toast = useToast()
-const { isOnline, totalPendingCount, totalFailedCount } = useOfflinePutawayQueue()
+const {
+  isOnline,
+  totalPendingCount: putawayPendingCount,
+  totalFailedCount: putawayFailedCount,
+} = useOfflinePutawayQueue()
+const {
+  totalPendingCount: pickingPendingCount,
+  totalFailedCount: pickingFailedCount,
+} = useOfflinePickingQueue()
+
+function getTaskPendingCount(taskId: string): number {
+  if (taskId === 'receiving') return putawayPendingCount.value
+  if (taskId === 'picking') return pickingPendingCount.value
+  return 0
+}
+
+function getTaskFailedCount(taskId: string): number {
+  if (taskId === 'receiving') return putawayFailedCount.value
+  if (taskId === 'picking') return pickingFailedCount.value
+  return 0
+}
 
 function canAccessTask(task: PdaTask): boolean {
   if (!task.allowedRoles || task.allowedRoles.length === 0) return true
@@ -138,22 +161,22 @@ function handleTaskClick(task: PdaTask) {
           <p class="text-xs text-slate-500 mt-0.5">{{ task.subtitle }}</p>
 
           <div
-            v-if="task.id === 'receiving' && (totalFailedCount > 0 || totalPendingCount > 0)"
+            v-if="getTaskFailedCount(task.id) > 0 || getTaskPendingCount(task.id) > 0"
             class="flex items-center gap-1.5 flex-wrap mt-2"
           >
             <span
-              v-if="totalFailedCount > 0"
+              v-if="getTaskFailedCount(task.id) > 0"
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-200"
             >
               <i class="pi pi-exclamation-triangle text-[10px]"></i>
-              {{ totalFailedCount }} hibás szinkron
+              {{ getTaskFailedCount(task.id) }} hibás szinkron
             </span>
             <span
-              v-if="totalPendingCount > 0"
+              v-if="getTaskPendingCount(task.id) > 0"
               class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200"
             >
               <i class="pi pi-clock text-[10px]"></i>
-              {{ totalPendingCount }} offline sorban
+              {{ getTaskPendingCount(task.id) }} offline sorban
             </span>
           </div>
         </div>

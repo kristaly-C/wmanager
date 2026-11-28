@@ -1,4 +1,4 @@
-import { LocationType, MovementType, SlotMode, Role, PurchaseOrderStatus, GoodsReceiptStatus, StockTransferStatus, StocktakeStatus, ReturnCaseStatus, SalesOrderStatus, StockReportStatus } from "./enums";
+import { LocationType, MovementType, SlotMode, Role, PurchaseOrderStatus, GoodsReceiptStatus, StockTransferStatus, StocktakeStatus, ReturnCaseStatus, SalesOrderStatus, SalesChannel, PickTaskStatus, StockReportStatus } from "./enums";
 
 export interface Product {
     id: string;
@@ -131,6 +131,8 @@ export interface Location {
     type: LocationType;
     isActive: boolean;
     slotMode?: SlotMode;
+    canFulfillWebshop?: boolean;
+    fulfillmentPriority?: number;
 
     createdAt: string;
     updatedAt: string;
@@ -146,6 +148,7 @@ export interface StockMovement {
     purchaseOrderId?: string | null;
     goodsReceiptId?: string | null;
     salesOrderId?: string | null;
+    pickTaskId?: string | null;
     stocktakeSessionId?: string | null;
     stockTransferId?: string | null;
     returnCaseId?: string | null;
@@ -309,9 +312,79 @@ export interface ReturnCaseItem {
 
 export interface SalesOrder {
     id: string;
+    orderNumber: string;
+    externalOrderRef?: string | null;
+    channel: SalesChannel;
+    isPickup: boolean;
     status: SalesOrderStatus;
+    sourceLocationId: string;
+    transferRequestedFromLocationId?: string | null;
+    holdReason?: string | null;
+    customerName: string;
+    customerEmail?: string | null;
+    customerPhone?: string | null;
+    shippingAddress?: string | null;
+    note?: string | null;
+    createdByUserId?: string | null;
+    completedByUserId?: string | null;
+    completedAt?: string | null;
+    cancelledAt?: string | null;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface SalesOrderItem {
+    id: string;
+    salesOrderId: string;
+    variantId: string;
+    orderedQuantity: number;
+    reservedQuantity: number;
+    pickedQuantity: number;
+    unitNetPrice: number;
+    unitGrossPrice: number;
+    vatRate: number;
+    discountPercent?: number | null;
+    note?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface SalesOrderWithItems extends SalesOrder {
+    items: SalesOrderItem[];
+}
+
+export interface PickTask {
+    id: string;
+    taskNumber: string;
+    salesOrderId: string;
+    sourceLocationId: string;
+    zoneId?: string | null;
+    status: PickTaskStatus;
+    assignedToUserId?: string | null;
+    toteCode?: string | null;
+    dropoffLocationId?: string | null;
+    dropoffCode?: string | null;
+    startedAt?: string | null;
+    droppedAt?: string | null;
+    completedAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PickTaskItem {
+    id: string;
+    pickTaskId: string;
+    salesOrderItemId: string;
+    variantId: string;
+    suggestedLocationId?: string | null;
+    requiredQuantity: number;
+    pickedQuantity: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PickTaskWithItems extends PickTask {
+    items: PickTaskItem[];
 }
 
 export interface Brand  {

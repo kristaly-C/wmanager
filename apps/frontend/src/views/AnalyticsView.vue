@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { variantApi, type VariantItem } from '@/api/variants'
 import {
@@ -10,9 +10,16 @@ import {
   type VariantPurchaseHistoryResponse,
   type VariantSupplierItem,
 } from '@/api/variantSuppliers'
+import {
+  salesOrdersApi,
+  type VariantSalesHistoryItem,
+  type VariantSalesHistoryResponse,
+  type VariantSalesMonthlyStat,
+} from '@/api/salesOrders'
 import { extractApiError } from '@/utils/locationMeta'
 import { formatDateTime, formatPrice, formatSignedQuantity } from '@/utils/formatters'
 import { canSeeCostPrice, formatCurrency } from '@/utils/procurementMeta'
+import { SALES_CHANNEL_META } from '@/utils/salesOrderMeta'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatKpiCard from '@/components/common/StatKpiCard.vue'
 import VariantSuppliersModal, {
@@ -23,7 +30,7 @@ import AutoComplete, {
   type AutoCompleteOptionSelectEvent,
 } from 'primevue/autocomplete'
 import Column from 'primevue/column'
-import DataTable from 'primevue/datatable'
+import DataTable, { type DataTablePageEvent } from 'primevue/datatable'
 import { useToast } from 'primevue/usetoast'
 
 type AnalyticsTab = 'purchase-analytics' | 'sales-margin'
@@ -49,7 +56,18 @@ const toast = useToast()
 
 const canViewCost = computed(() => canSeeCostPrice(authStore.user?.role))
 
-const activeTab = ref<AnalyticsTab>('purchase-analytics')
+function readQueryTab(): AnalyticsTab {
+  const raw = route.query.tab
+  const value =
+    typeof raw === 'string'
+      ? raw.trim()
+      : Array.isArray(raw) && typeof raw[0] === 'string'
+        ? raw[0].trim()
+        : ''
+  return value === 'sales-margin' ? 'sales-margin' : 'purchase-analytics'
+}
+
+const activeTab = ref<AnalyticsTab>(readQueryTab())
 const tabs: AnalyticsTabConfig[] = [
   {
     id: 'purchase-analytics',
@@ -60,8 +78,7 @@ const tabs: AnalyticsTabConfig[] = [
     id: 'sales-margin',
     label: 'Értékesítés & Árrés',
     icon: 'pi pi-percentage',
-    disabled: true,
-    badge: 'Hamarosan',
+    disabled: false,
   },
 ]
 
@@ -71,18 +88,26 @@ const variantSuggestions = ref<VariantSearchOption[]>([])
 const quickVariants = ref<VariantItem[]>([])
 const searchingVariants = ref(false)
 
-// Kiválasztott variáns adatai
+// Kiválasztott variáns adatai (Beszerzési ártörténet)
 const selectedVariant = ref<VariantItem | null>(null)
 const historyData = ref<VariantPurchaseHistoryResponse | null>(null)
 const variantSuppliers = ref<VariantSupplierItem[]>([])
 const loadingAnalytics = ref(false)
 const loadError = ref<string | null>(null)
 
+// Kiválasztott variáns adatai (Értékesítés & Árrés)
+const salesHistoryData = ref<VariantSalesHistoryResponse | null>(null)
+const loadingSalesAnalytics = ref(false)
+const salesLoadError = ref<string | null>(null)
+const salesPage = ref(0)
+const salesRows = 20
+
 // Beszállítók modal
 const isSuppliersModalOpen = ref(false)
 
 let latestSearchSeq = 0
 let latestLoadSeq = 0
+let latestSalesSeq = 0
 
 function formatVariantOptionLabel(v: VariantItem): string {
   const parts: string[] = []
@@ -155,6 +180,43 @@ const totalPurchasedQtyFormatted = computed(
 )
 
 const totalPurchasedValueFormatted = computed(() => formatPrice(totalPurchasedValueHuf.value))
+
+// Értékesítés & Árrés KPI számítások
+const salesTotalSoldQtyFormatted = computed(() => {
+  const qty = salesHistoryData.value?.summary.totalSoldQty ?? 0
+  return `${qty.toLocaleString('hu-HU')} db`
+})
+
+const salesTotalRevenueFormatted = computed(() =>
+  formatPrice(salesHistoryData.value?.summary.totalSoldRevenueHuf),
+)
+
+const salesTotalCogsFormatted = computed(() =>
+  formatPrice(salesHistoryData.value?.summary.totalSoldCogsHuf),
+)
+
+const salesTotalMarginFormatted = computed(() =>
+  formatPrice(salesHistoryData.value?.summary.totalMarginHuf),
+)
+
+function formatMarginPercent(pct: number | null | undefined): string {
+  if (pct === null || pct === undefined || Number.isNaN(pct)) return '—'
+  return `${pct.toLocaleString('hu-HU', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`
+}
+
+const salesMarginSubtext = computed(
+  () => `Árrésráta: ${formatMarginPercent(salesHistoryData.value?.summary.totalMarginPercent)}`,
+)
+
+const salesMarginColorClass = computed(() => {
+  const margin = salesHistoryData.value?.summary.totalMarginHuf ?? 0
+  if (margin > 0) return 'text-emerald-600'
+  if (margin < 0) return 'text-rose-600'
+  return 'text-[#686f6a]'
+})
 
 async function onVariantSearch(event: AutoCompleteCompleteEvent) {
   if (!canViewCost.value) return
@@ -231,10 +293,52 @@ async function loadVariantAnalytics(variantId: string, knownVariant?: VariantIte
   }
 }
 
+async function loadVariantSalesHistory(variantId: string) {
+  if (!canViewCost.value || !variantId) return
+  const seq = ++latestSalesSeq
+  loadingSalesAnalytics.value = true
+  salesLoadError.value = null
+
+  try {
+    const res = await salesOrdersApi.getVariantHistory(variantId, {
+      skip: salesPage.value * salesRows,
+      take: salesRows,
+    })
+    if (seq !== latestSalesSeq) return
+    salesHistoryData.value = res.data
+  } catch (err) {
+    if (seq !== latestSalesSeq) return
+    const msg = extractApiError(err, 'Nem sikerült betölteni a variáns értékesítési adatait.')
+    salesLoadError.value = msg
+    salesHistoryData.value = null
+    toast.add({
+      severity: 'error',
+      summary: 'Betöltési hiba',
+      detail: msg,
+      life: 5000,
+    })
+  } finally {
+    if (seq === latestSalesSeq) {
+      loadingSalesAnalytics.value = false
+    }
+  }
+}
+
 async function refreshVariantSuppliersAndHistory() {
   const id = modalVariantTarget.value?.id
   if (!id || !canViewCost.value) return
   await loadVariantAnalytics(id, selectedVariant.value ?? undefined)
+}
+
+function switchTab(tabId: AnalyticsTab) {
+  if (activeTab.value === tabId) return
+  activeTab.value = tabId
+  if (readQueryTab() !== tabId) {
+    void router.replace({
+      path: '/analytics',
+      query: { ...route.query, tab: tabId },
+    })
+  }
 }
 
 function selectVariantAndSyncUrl(variant: VariantItem) {
@@ -247,6 +351,10 @@ function selectVariantAndSyncUrl(variant: VariantItem) {
     })
   } else {
     void loadVariantAnalytics(variant.id, variant)
+    if (activeTab.value === 'sales-margin') {
+      salesPage.value = 0
+      void loadVariantSalesHistory(variant.id)
+    }
   }
 }
 
@@ -262,11 +370,23 @@ function clearSelection() {
   historyData.value = null
   variantSuppliers.value = []
   loadError.value = null
+  salesHistoryData.value = null
+  salesLoadError.value = null
+  salesPage.value = 0
+  loadingSalesAnalytics.value = false
+  latestSalesSeq++
   if (route.query.variantId) {
     const nextQuery = { ...route.query }
     delete nextQuery.variantId
     void router.replace({ path: '/analytics', query: nextQuery })
   }
+}
+
+function onSalesPage(event: DataTablePageEvent) {
+  const variantId = selectedVariant.value?.id || readQueryVariantId()
+  if (!variantId) return
+  salesPage.value = event.page
+  void loadVariantSalesHistory(variantId)
 }
 
 function formatMonthLabel(year: number, month: number): string {
@@ -296,30 +416,65 @@ function readQueryVariantId(): string {
 }
 
 watch(
+  () => route.query.tab,
+  () => {
+    const nextTab = readQueryTab()
+    if (activeTab.value !== nextTab) {
+      activeTab.value = nextTab
+    }
+  },
+)
+
+watch(activeTab, (tab) => {
+  if (!canViewCost.value || tab !== 'sales-margin') return
+  const variantId = selectedVariant.value?.id || readQueryVariantId()
+  if (!variantId) return
+  if (salesHistoryData.value?.variant.id !== variantId) {
+    salesPage.value = 0
+    void loadVariantSalesHistory(variantId)
+  }
+})
+
+watch(
   () => [route.query.variantId, canViewCost.value] as const,
   ([, allowed]) => {
     if (!allowed) return
     const qId = readQueryVariantId()
     if (!qId) {
-      if (selectedVariant.value) {
+      if (selectedVariant.value || salesHistoryData.value) {
         selectedVariant.value = null
         variantAutocompleteModel.value = null
         historyData.value = null
         variantSuppliers.value = []
+        salesHistoryData.value = null
+        salesLoadError.value = null
+        salesPage.value = 0
+        loadingSalesAnalytics.value = false
+        latestSalesSeq++
       }
       return
     }
     const known = selectedVariant.value?.id === qId ? selectedVariant.value : undefined
     void loadVariantAnalytics(qId, known)
+    if (activeTab.value === 'sales-margin') {
+      salesPage.value = 0
+      salesHistoryData.value = null
+      salesLoadError.value = null
+      void loadVariantSalesHistory(qId)
+    }
   },
 )
 
 onMounted(() => {
   if (!canViewCost.value) return
+  activeTab.value = readQueryTab()
   void loadQuickVariants()
   const initialId = readQueryVariantId()
   if (initialId) {
     void loadVariantAnalytics(initialId)
+    if (activeTab.value === 'sales-margin') {
+      void loadVariantSalesHistory(initialId)
+    }
   }
 })
 </script>
@@ -349,7 +504,7 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <!-- Kapszula al-fül váltó (bővíthető szerkezet jövőbeli eladási/árrés füleknek) -->
+      <!-- Kapszula al-fül váltó -->
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div
           class="inline-flex items-center bg-white border border-white rounded-2xl p-1 shadow-sm gap-1"
@@ -359,7 +514,7 @@ onMounted(() => {
             :key="tab.id"
             type="button"
             :disabled="tab.disabled"
-            @click="!tab.disabled && (activeTab = tab.id)"
+            @click="!tab.disabled && switchTab(tab.id)"
             class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
             :class="
               tab.disabled
@@ -506,11 +661,13 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Betöltés állapot -->
-      <div
-        v-if="loadingAnalytics"
-        class="bg-white rounded-3xl border border-white shadow-sm py-16 text-center text-sm text-slate-400"
-      >
+      <!-- 1. FÜL: Beszerzési ártörténet & Statisztika -->
+      <template v-if="activeTab === 'purchase-analytics'">
+        <!-- Betöltés állapot -->
+        <div
+          v-if="loadingAnalytics"
+          class="bg-white rounded-3xl border border-white shadow-sm py-16 text-center text-sm text-slate-400"
+        >
         <i class="pi pi-spin pi-spinner text-lg mr-2"></i>
         <span>Beszerzési ártörténet és statisztikák betöltése...</span>
       </div>
@@ -895,6 +1052,313 @@ onMounted(() => {
             </Column>
           </DataTable>
         </div>
+      </template>
+      </template>
+
+      <!-- 2. FÜL: Értékesítés & Árrés -->
+      <template v-else-if="activeTab === 'sales-margin'">
+        <!-- Betöltés állapot -->
+        <div
+          v-if="loadingSalesAnalytics && !salesHistoryData"
+          class="bg-white rounded-3xl border border-white shadow-sm py-16 text-center text-sm text-slate-400"
+        >
+          <i class="pi pi-spin pi-spinner text-lg mr-2"></i>
+          <span>Értékesítési és árrés statisztikák betöltése...</span>
+        </div>
+
+        <!-- Hiba állapot -->
+        <div
+          v-else-if="salesLoadError"
+          class="bg-white rounded-3xl border border-rose-200 shadow-sm p-8 text-center space-y-2"
+        >
+          <i class="pi pi-exclamation-circle text-2xl text-rose-500"></i>
+          <p class="text-sm font-semibold text-slate-900">{{ salesLoadError }}</p>
+        </div>
+
+        <!-- Üres állapot (nincs kiválasztott variáns) -->
+        <div
+          v-else-if="!salesHistoryData"
+          class="bg-white rounded-3xl border border-white shadow-sm p-12 text-center space-y-2.5"
+        >
+          <div
+            class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mx-auto"
+          >
+            <i class="pi pi-percentage text-xl"></i>
+          </div>
+          <h2 class="text-base font-bold text-slate-900">
+            Válassz egy termékvariánst az árrés-elemzéshez
+          </h2>
+          <p class="text-xs text-slate-500 max-w-md mx-auto">
+            Használd a fenti keresőt SKU, terméknév vagy vonalkód alapján az eladási volumen,
+            árbevétel, ELÁBÉ (COGS) és realizált árrés megtekintéséhez.
+          </p>
+        </div>
+
+        <!-- Értékesítési elemzési tartalom -->
+        <template v-else>
+          <!-- 4 KPI Kártya (StatKpiCard) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <StatKpiCard
+              label="Eladott mennyiség"
+              :value="salesTotalSoldQtyFormatted"
+              :subtext="`${salesHistoryData.total.toLocaleString('hu-HU')} lezárt rendelési tétel`"
+              icon="pi pi-shopping-bag"
+              icon-class="text-[#f46714]"
+            />
+            <StatKpiCard
+              label="Nettó árbevétel"
+              :value="salesTotalRevenueFormatted"
+              subtext="Teljesített rendelések nettó értéke"
+              icon="pi pi-wallet"
+              icon-class="text-sky-600"
+            />
+            <StatKpiCard
+              label="ELÁBÉ (COGS)"
+              :value="salesTotalCogsFormatted"
+              subtext="Eladott áruk beszerzési értéke"
+              icon="pi pi-box"
+              icon-class="text-indigo-600"
+            />
+            <StatKpiCard
+              label="Realizált árrés"
+              :value="salesTotalMarginFormatted"
+              :subtext="salesMarginSubtext"
+              :subtext-class="salesMarginColorClass"
+              icon="pi pi-percentage"
+              :icon-class="salesMarginColorClass"
+            />
+          </div>
+
+          <!-- Havi értékesítési & árrés statisztika táblázat -->
+          <div class="bg-white rounded-3xl border border-white shadow-sm p-6 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 class="text-base font-bold text-slate-900">
+                  Havi értékesítési &amp; árrés statisztika
+                </h2>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  Havi bontású eladott mennyiség, nettó árbevétel, ELÁBÉ (COGS) és realizált árrés.
+                </p>
+              </div>
+              <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
+                {{ salesHistoryData.monthlyStats.length }} hónap
+              </span>
+            </div>
+
+            <DataTable
+              :value="salesHistoryData.monthlyStats"
+              :paginator="salesHistoryData.monthlyStats.length > 12"
+              :rows="12"
+              dataKey="id"
+              responsiveLayout="scroll"
+              class="text-[13px]"
+            >
+              <template #empty>
+                <div class="py-10 text-center text-xs text-slate-400">
+                  Ehhez a variánshoz még nem keletkezett havi értékesítési statisztika.
+                </div>
+              </template>
+
+              <Column header="Hónap">
+                <template #body="{ data }: { data: VariantSalesMonthlyStat }">
+                  <span class="font-mono font-bold text-slate-900 whitespace-nowrap">
+                    {{ formatMonthLabel(data.year, data.month) }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Eladott db" class="text-right">
+                <template #body="{ data }: { data: VariantSalesMonthlyStat }">
+                  <span class="font-semibold text-slate-800 whitespace-nowrap">
+                    {{ data.soldQty.toLocaleString('hu-HU') }} db
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Nettó árbevétel" class="text-right">
+                <template #body="{ data }: { data: VariantSalesMonthlyStat }">
+                  <span class="font-semibold text-slate-800 whitespace-nowrap">
+                    {{ formatPrice(data.soldRevenueHuf) }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="ELÁBÉ" class="text-right">
+                <template #body="{ data }: { data: VariantSalesMonthlyStat }">
+                  <span class="text-slate-700 whitespace-nowrap">
+                    {{ formatPrice(data.soldCogsHuf) }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Realizált árrés (Ft)" class="text-right">
+                <template #body="{ data }: { data: VariantSalesMonthlyStat }">
+                  <span
+                    class="font-bold whitespace-nowrap"
+                    :class="
+                      data.marginHuf > 0
+                        ? 'text-emerald-700'
+                        : data.marginHuf < 0
+                          ? 'text-rose-700'
+                          : 'text-slate-600'
+                    "
+                  >
+                    {{ formatPrice(data.marginHuf) }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Árrés %" class="text-right">
+                <template #body="{ data }: { data: VariantSalesMonthlyStat }">
+                  <span
+                    class="font-semibold whitespace-nowrap"
+                    :class="
+                      data.marginPercent !== null && data.marginPercent > 0
+                        ? 'text-emerald-700'
+                        : data.marginPercent !== null && data.marginPercent < 0
+                          ? 'text-rose-700'
+                          : 'text-slate-500'
+                    "
+                  >
+                    {{ formatMarginPercent(data.marginPercent) }}
+                  </span>
+                </template>
+              </Column>
+            </DataTable>
+          </div>
+
+          <!-- Lezárt értékesítési tételek (COMPLETED rendelések) -->
+          <div class="bg-white rounded-3xl border border-white shadow-sm p-6 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 class="text-base font-bold text-slate-900">
+                  Lezárt értékesítési tételek (COMPLETED rendelések)
+                </h2>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  A variáns összes teljesített vevői rendelési tétele csatorna, telephely és
+                  egységár bontásban.
+                </p>
+              </div>
+              <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
+                {{ salesHistoryData.total.toLocaleString('hu-HU') }} tétel
+              </span>
+            </div>
+
+            <DataTable
+              :value="salesHistoryData.items"
+              :lazy="true"
+              :paginator="true"
+              :rows="salesRows"
+              :totalRecords="salesHistoryData.total"
+              :first="salesPage * salesRows"
+              :loading="loadingSalesAnalytics"
+              dataKey="id"
+              responsiveLayout="scroll"
+              class="text-[13px]"
+              @page="onSalesPage"
+            >
+              <template #empty>
+                <div class="py-10 text-center text-xs text-slate-400">
+                  Ehhez a variánshoz még nincs teljesített értékesítési tétel.
+                </div>
+              </template>
+
+              <Column header="Teljesítés dátuma">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <span class="whitespace-nowrap text-xs text-slate-700">
+                    {{ formatDateTime(data.salesOrder.completedAt ?? data.salesOrder.createdAt) }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Rendelésszám">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <div class="space-y-0.5">
+                    <RouterLink
+                      :to="{ path: '/orders', query: { orderId: data.salesOrder.id } }"
+                      class="inline-flex items-center gap-1 font-mono text-xs font-bold text-[#f46714] hover:text-orange-700 hover:underline whitespace-nowrap"
+                    >
+                      <span>{{ data.salesOrder.orderNumber }}</span>
+                      <i class="pi pi-external-link text-[10px]"></i>
+                    </RouterLink>
+                    <p
+                      v-if="data.salesOrder.externalOrderRef"
+                      class="text-[11px] font-mono text-slate-400"
+                    >
+                      {{ data.salesOrder.externalOrderRef }}
+                    </p>
+                  </div>
+                </template>
+              </Column>
+
+              <Column header="Csatorna">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <span
+                    class="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-lg whitespace-nowrap"
+                    :class="SALES_CHANNEL_META[data.salesOrder.channel].badgeClass"
+                  >
+                    <i :class="[SALES_CHANNEL_META[data.salesOrder.channel].icon, 'text-[10px]']"></i>
+                    <span>{{ SALES_CHANNEL_META[data.salesOrder.channel].label }}</span>
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Telephely">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <span class="text-xs font-medium text-slate-800 whitespace-nowrap">
+                    {{ data.salesOrder.sourceLocation.name }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Vevő">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <span class="text-xs font-medium text-slate-800">
+                    {{ data.salesOrder.customerName }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Mennyiség" class="text-right">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <span class="font-bold text-slate-900 whitespace-nowrap">
+                    {{
+                      (data.pickedQuantity > 0
+                        ? data.pickedQuantity
+                        : data.orderedQuantity
+                      ).toLocaleString('hu-HU')
+                    }}
+                    db
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Nettó egységár" class="text-right">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <span class="font-semibold text-slate-800 whitespace-nowrap">
+                    {{ formatPrice(data.unitNetPrice) }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Sor nettó" class="text-right">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <span class="font-bold text-slate-900 whitespace-nowrap">
+                    {{ formatPrice(data.lineNetTotalHuf) }}
+                  </span>
+                </template>
+              </Column>
+
+              <Column header="Sor bruttó" class="text-right">
+                <template #body="{ data }: { data: VariantSalesHistoryItem }">
+                  <span class="font-semibold text-slate-700 whitespace-nowrap">
+                    {{ formatPrice(data.lineGrossTotalHuf) }}
+                  </span>
+                </template>
+              </Column>
+            </DataTable>
+          </div>
+        </template>
       </template>
 
       <!-- Helyben nyitható Beszállítók kezelése Modal -->

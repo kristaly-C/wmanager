@@ -15,6 +15,7 @@ declare module 'vue' {
     Button: typeof import('primevue/button')['default']
     ConfirmDeleteDialog: typeof import('./src/components/common/ConfirmDeleteDialog.vue')['default']
     Dialog: typeof import('primevue/dialog')['default']
+    FulfillmentRoutingCard: typeof import('./src/components/control-panel/FulfillmentRoutingCard.vue')['default']
     GlobalProductSearch: typeof import('./src/components/common/GlobalProductSearch.vue')['default']
     GoodsReceiptApproveModal: typeof import('./src/components/procurement/GoodsReceiptApproveModal.vue')['default']
     GoodsReceiptFormModal: typeof import('./src/components/procurement/GoodsReceiptFormModal.vue')['default']
@@ -25,8 +26,11 @@ declare module 'vue' {
     LocationsTreeTab: typeof import('./src/components/inventory/LocationsTreeTab.vue')['default']
     Message: typeof import('primevue/message')['default']
     MyQrBadgeModal: typeof import('./src/components/common/MyQrBadgeModal.vue')['default']
+    OrderCreateModal: typeof import('./src/components/orders/OrderCreateModal.vue')['default']
+    OrderDetailDrawer: typeof import('./src/components/orders/OrderDetailDrawer.vue')['default']
     PageHeader: typeof import('./src/components/common/PageHeader.vue')['default']
     PendingReportsWidget: typeof import('./src/components/dashboard/PendingReportsWidget.vue')['default']
+    PickingBoardTab: typeof import('./src/components/orders/PickingBoardTab.vue')['default']
     ProductFormModal: typeof import('./src/components/catalog/ProductFormModal.vue')['default']
     ProductListSidebar: typeof import('./src/components/catalog/ProductListSidebar.vue')['default']
     ProductsTab: typeof import('./src/components/catalog/ProductsTab.vue')['default']
@@ -49,5 +53,6 @@ declare module 'vue' {
     VariantBarcodesModal: typeof import('./src/components/catalog/VariantBarcodesModal.vue')['default']
     VariantFormModal: typeof import('./src/components/catalog/VariantFormModal.vue')['default']
     VariantSuppliersModal: typeof import('./src/components/catalog/VariantSuppliersModal.vue')['default']
+    WhatsNewModal: typeof import('./src/components/common/WhatsNewModal.vue')['default']
   }
 }

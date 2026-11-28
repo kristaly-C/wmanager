@@ -45,6 +45,7 @@ export const WORKSPACES: WorkspaceConfig[] = [
       { label: 'Katalógus', icon: 'pi pi-tags', to: '/catalog' }, // Később '/catalog' al-fülekkel
       { label: 'Lokációk', icon: 'pi pi-sitemap', to: '/inventory' },
       { label: 'Beszerzés', icon: 'pi pi-shopping-cart', to: '/purchase-orders' },
+      { label: 'Rendelések', icon: 'pi pi-shopping-bag', to: '/orders' },
       { label: 'Áruszétosztás', icon: 'pi pi-arrows-h', to: '/transfers', disabled: true },
       { label: 'Elemzések', icon: 'pi pi-chart-bar', to: '/analytics' },
     ],
@@ -56,7 +57,7 @@ export const WORKSPACES: WorkspaceConfig[] = [
     allowedRoles: [Role.ADMIN, Role.BOSS, Role.RMA_CLERK, Role.ORDER_CLERK, Role.STORE_MANAGER, Role.STORE_STAFF],
     navItems: [
       { label: 'Áttekintés', icon: 'pi pi-home', to: '/' },
-      { label: 'Rendelések', icon: 'pi pi-shopping-bag', to: '/orders', disabled: true },
+      { label: 'Rendelések', icon: 'pi pi-shopping-bag', to: '/orders' },
       { label: 'Visszáru (RMA)', icon: 'pi pi-replay', to: '/returns', disabled: true },
       { label: 'Készletinfó', icon: 'pi pi-search', to: '/stock-lookup' },
     ],

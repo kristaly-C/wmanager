@@ -57,9 +57,32 @@ export class LocationService extends BaseService<PrismaService['location']> {
         }
     }
 
+    private assertValidFulfillmentFields(
+        type: LocationType,
+        canFulfillWebshop?: boolean,
+        fulfillmentPriority?: number,
+    ) {
+        if (
+            type !== LocationType.WAREHOUSE &&
+            type !== LocationType.STORE &&
+            (canFulfillWebshop !== undefined || fulfillmentPriority !== undefined)
+        ) {
+            throw new BadRequestException(
+                'A canFulfillWebshop és fulfillmentPriority csak WAREHOUSE és STORE telephelyeken állítható',
+            );
+        }
+    }
+
     async createLocation(data: CreateLocationDto) {
         await this.assertValidPlacement(data.type, data.parentId);
         this.assertValidSlotMode(data.type, data.slotMode);
+        this.assertValidFulfillmentFields(
+            data.type,
+            data.canFulfillWebshop,
+            data.fulfillmentPriority,
+        );
+
+        const defaultPriority = data.type === LocationType.WAREHOUSE ? 10 : 100;
         return super.create({
             name: data.name,
             description: data.description,
@@ -67,6 +90,8 @@ export class LocationService extends BaseService<PrismaService['location']> {
             slotMode: data.slotMode,
             isActive: data.isActive,
             parentId: data.parentId ?? null,
+            canFulfillWebshop: data.canFulfillWebshop ?? true,
+            fulfillmentPriority: data.fulfillmentPriority ?? defaultPriority,
         });
     }
 
@@ -81,6 +106,13 @@ export class LocationService extends BaseService<PrismaService['location']> {
         }
         if (data.slotMode !== undefined) {
             this.assertValidSlotMode(current.type, data.slotMode);
+        }
+        if (data.canFulfillWebshop !== undefined || data.fulfillmentPriority !== undefined) {
+            this.assertValidFulfillmentFields(
+                current.type,
+                data.canFulfillWebshop,
+                data.fulfillmentPriority,
+            );
         }
     
         return this.prisma.location.update({ where: { id }, data });

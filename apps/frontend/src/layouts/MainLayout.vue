@@ -4,10 +4,12 @@ import { useAuthStore, type AuthUser } from '@/stores/auth'
 import { useSearchStore } from '@/stores/search'
 import { useWorkspaceStore, type WorkspaceId } from '@/stores/workspace'
 import GlobalProductSearch from '@/components/common/GlobalProductSearch.vue'
+import WhatsNewModal from '@/components/common/WhatsNewModal.vue'
 import Select from 'primevue/select'
 import Tag from 'primevue/tag'
 import { ref } from 'vue'
 import { useQrBadgeScanner } from '@/composables/useQrBadgeScanner'
+import { useChangelog } from '@/composables/useChangelog'
 import { extractApiError } from '@/utils/locationMeta'
 
 const route = useRoute()
@@ -15,6 +17,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 const searchStore = useSearchStore()
 const workspaceStore = useWorkspaceStore()
+const { hasUnread, unreadCount } = useChangelog()
+const isWhatsNewOpen = ref(false)
 
 // Amikor a felhasználó munkaterületet vált a legördülőben
 function onWorkspaceChange(newId: WorkspaceId) {
@@ -176,6 +180,20 @@ useQrBadgeScanner(async (qrToken, isBusy) => {
           :value="authStore.user?.role"
           class="!hidden sm:!inline-flex !bg-white !text-slate-700 !border !border-slate-200 !font-bold !px-3 !py-2 !rounded-2xl shadow-sm whitespace-nowrap text-xs"
         />
+        <!-- Újdonságok / Frissítések gomb -->
+        <button
+          type="button"
+          @click="isWhatsNewOpen = true"
+          :title="hasUnread ? `Újdonságok (${unreadCount} új frissítés)` : 'Újdonságok és frissítések'"
+          :aria-label="hasUnread ? `Újdonságok (${unreadCount} új frissítés)` : 'Újdonságok és frissítések'"
+          class="w-10 h-10 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-500 transition-colors shadow-sm flex justify-center items-center cursor-pointer shrink-0 relative"
+        >
+          <i class="pi pi-sparkles text-sm"></i>
+          <span
+            v-if="hasUnread"
+            class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-orange-500 ring-2 ring-[#F3F4F6]"
+          ></span>
+        </button>
         <button
           v-if="authStore.user?.role !== 'ADMIN' && authStore.user?.role !== 'BOSS'"
           type="button"
@@ -213,6 +231,8 @@ useQrBadgeScanner(async (qrToken, isBusy) => {
     </div>
     <!-- Saját QR-kód megjelenítő és nyomtató ablak -->
     <MyQrBadgeModal v-model:visible="isQrModalOpen" />
+    <!-- Újdonságok / Frissítések ablak -->
+    <WhatsNewModal v-model:visible="isWhatsNewOpen" />
     <!-- OKOS VÉDELEM: Megerősítő ablak, ha munka közben más csippant -->
     <Dialog
       :visible="!!pendingSwitch"

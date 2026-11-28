@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FulfillmentRoutingCard from '@/components/control-panel/FulfillmentRoutingCard.vue'
 import InitialStockModeCard from '@/components/control-panel/InitialStockModeCard.vue'
 </script>
 
@@ -16,6 +17,9 @@ import InitialStockModeCard from '@/components/control-panel/InitialStockModeCar
 
     <!-- Nyitókészlet felvitel mód (INITIAL_STOCK) -->
     <InitialStockModeCard />
+
+    <!-- Webshop teljesítési sorrend & útválasztás (ADMIN / BOSS) -->
+    <FulfillmentRoutingCard />
 
     <!-- Helyőrző kártya a közelgő biztonsági / bejelentkezés-korlátozási beállításokhoz -->
     <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">

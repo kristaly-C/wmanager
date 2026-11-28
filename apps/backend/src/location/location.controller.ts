@@ -78,6 +78,17 @@ export class LocationController {
                  @Body() updateLocation: UpdateLocationDto,
                  @CurrentUser() user: AuthUser) 
     {
+        if (
+            (updateLocation.canFulfillWebshop !== undefined ||
+                updateLocation.fulfillmentPriority !== undefined) &&
+            user.role !== Role.ADMIN &&
+            user.role !== Role.BOSS
+        ) {
+            throw new ForbiddenException(
+                'A webshop teljesítési beállításokat és prioritást csak ADMIN vagy BOSS módosíthatja',
+            );
+        }
+
         await this.locationAccessService.assertCanAccess(user, id);
 
         if( updateLocation.parentId){

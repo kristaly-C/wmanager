@@ -16,6 +16,7 @@ import { StockModule } from './stock/stock.module';
 import { StocktakeModule } from './stocktake/stocktake.module';
 import { PurchaseOrderModule } from './purchase-order/purchase-order.module';
 import { GoodsReceiptModule } from './goods-receipt/goods-receipt.module';
+import { SalesOrderModule } from './sales-order/sales-order.module';
 
 function validateEnv(config: Record<string, unknown>) {
     const databaseUrl = config.DATABASE_URL;
@@ -62,6 +63,7 @@ function validateEnv(config: Record<string, unknown>) {
         StocktakeModule,
         PurchaseOrderModule,
         GoodsReceiptModule,
+        SalesOrderModule,
     ],
     controllers: [],
     providers: [
