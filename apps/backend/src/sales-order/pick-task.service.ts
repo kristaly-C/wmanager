@@ -17,7 +17,7 @@ import {
     excludeCostPrice,
     excludeUnitCostHuf,
 } from '../common/cost-price';
-import { acquireSiteVariantLocks } from '../common/sales-reservation';
+import { acquireSiteVariantLocks, resolveClusterInfo } from '../common/sales-reservation';
 import { Prisma } from '../generated/prisma/client';
 import {
     LocationType,
@@ -160,8 +160,27 @@ export class PickTaskService {
             return [];
         }
 
-        const subtreeMap = await this.loadSubtreeLocations(tx, order.sourceLocationId);
-        const subtreeIds = Array.from(subtreeMap.keys());
+        let pickSiteIds: string[] = [order.sourceLocationId];
+        if (!order.isPickup) {
+            const cluster = await resolveClusterInfo(tx, order.sourceLocationId);
+            if (cluster.hubId === order.sourceLocationId && cluster.siteIds.length > 1) {
+                pickSiteIds = cluster.siteIds;
+            }
+        }
+
+        const subtreeBySite = new Map<string, Map<string, SubtreeLocationNode>>();
+        const siteIdByNodeId = new Map<string, string>();
+        for (const siteId of pickSiteIds) {
+            const map = await this.loadSubtreeLocations(tx, siteId);
+            subtreeBySite.set(siteId, map);
+            for (const nodeId of map.keys()) {
+                if (!siteIdByNodeId.has(nodeId)) {
+                    siteIdByNodeId.set(nodeId, siteId);
+                }
+            }
+        }
+
+        const subtreeIds = Array.from(siteIdByNodeId.keys());
         const variantIds = Array.from(new Set(itemsToAllocate.map((i) => i.variantId)));
 
         const stockRows = await tx.stockItem.findMany({
@@ -189,6 +208,9 @@ export class PickTaskService {
 
         type ZoneBucket = {
             zoneKey: string;
+            siteId: string;
+            siteName: string;
+            isPrimarySite: boolean;
             zoneId: string | null;
             zoneName: string;
             totalQty: number;
@@ -201,32 +223,42 @@ export class PickTaskService {
 
         for (const variantId of variantIds) {
             const variantStock = stockRows.filter((row) => row.variantId === variantId);
-            const activeOnly = variantStock.filter(
-                (row) => subtreeMap.get(row.locationId)?.isActive !== false,
-            );
+            const activeOnly = variantStock.filter((row) => {
+                const siteId = siteIdByNodeId.get(row.locationId);
+                return siteId ? subtreeBySite.get(siteId)?.get(row.locationId)?.isActive !== false : false;
+            });
             const chosenStock = activeOnly.length > 0 ? activeOnly : variantStock;
 
             const bucketByZoneKey = new Map<string, ZoneBucket>();
             for (const row of chosenStock) {
-                const node = subtreeMap.get(row.locationId);
+                const siteId = siteIdByNodeId.get(row.locationId);
+                if (!siteId) continue;
+                const siteSubtree = subtreeBySite.get(siteId);
+                if (!siteSubtree) continue;
+                const node = siteSubtree.get(row.locationId);
                 if (!node) continue;
+
                 const zoneId = this.resolveZoneIdFromSubtree(
                     node.id,
-                    order.sourceLocationId,
-                    subtreeMap,
+                    siteId,
+                    siteSubtree,
                 );
-                const zoneKey = zoneId ?? NO_ZONE_KEY;
-                const zoneName = zoneId ? (subtreeMap.get(zoneId)?.name ?? '') : '';
+                const zoneKey = `${siteId}::${zoneId ?? NO_ZONE_KEY}`;
+                const siteName = siteSubtree.get(siteId)?.name ?? '';
+                const zoneName = zoneId ? (siteSubtree.get(zoneId)?.name ?? '') : '';
                 const path = this.buildLocationPathFromSubtree(
                     node.id,
-                    order.sourceLocationId,
-                    subtreeMap,
+                    siteId,
+                    siteSubtree,
                 );
 
                 let bucket = bucketByZoneKey.get(zoneKey);
                 if (!bucket) {
                     bucket = {
                         zoneKey,
+                        siteId,
+                        siteName,
+                        isPrimarySite: siteId === order.sourceLocationId,
                         zoneId,
                         zoneName,
                         totalQty: 0,
@@ -271,6 +303,8 @@ export class PickTaskService {
         const allocationsByZoneKey = new Map<
             string,
             {
+                siteId: string;
+                siteName: string;
                 zoneId: string | null;
                 zoneName: string;
                 items: Array<{
@@ -285,6 +319,8 @@ export class PickTaskService {
 
         const addAllocation = (
             zoneKey: string,
+            siteId: string,
+            siteName: string,
             zoneId: string | null,
             zoneName: string,
             entry: {
@@ -297,16 +333,18 @@ export class PickTaskService {
             activeZoneKeys.add(zoneKey);
             let group = allocationsByZoneKey.get(zoneKey);
             if (!group) {
-                group = { zoneId, zoneName, items: [] };
+                group = { siteId, siteName, zoneId, zoneName, items: [] };
                 allocationsByZoneKey.set(zoneKey, group);
             }
-            const suggestedPath = entry.suggestedLocationId
-                ? this.buildLocationPathFromSubtree(
-                      entry.suggestedLocationId,
-                      order.sourceLocationId,
-                      subtreeMap,
-                  )
-                : '';
+            const siteSubtree = subtreeBySite.get(siteId);
+            const suggestedPath =
+                entry.suggestedLocationId && siteSubtree
+                    ? this.buildLocationPathFromSubtree(
+                          entry.suggestedLocationId,
+                          siteId,
+                          siteSubtree,
+                      )
+                    : '';
             group.items.push({
                 ...entry,
                 suggestedPath,
@@ -314,6 +352,9 @@ export class PickTaskService {
         };
 
         const compareZoneNames = (a: ZoneBucket, b: ZoneBucket) => {
+            if (a.isPrimarySite !== b.isPrimarySite) return a.isPrimarySite ? -1 : 1;
+            const siteCmp = HU_COLLATOR.compare(a.siteName, b.siteName);
+            if (siteCmp !== 0) return siteCmp;
             if (a.zoneId === null && b.zoneId !== null) return 1;
             if (a.zoneId !== null && b.zoneId === null) return -1;
             return HU_COLLATOR.compare(a.zoneName, b.zoneName);
@@ -337,12 +378,20 @@ export class PickTaskService {
             sortedBuckets: ZoneBucket[],
         ) => {
             if (sortedBuckets.length === 0) {
-                addAllocation(NO_ZONE_KEY, null, '', {
-                    salesOrderItemId: item.salesOrderItemId,
-                    variantId: item.variantId,
-                    suggestedLocationId: order.sourceLocationId,
-                    requiredQuantity: item.requiredQuantity,
-                });
+                const primaryName = subtreeBySite.get(order.sourceLocationId)?.get(order.sourceLocationId)?.name ?? '';
+                addAllocation(
+                    `${order.sourceLocationId}::${NO_ZONE_KEY}`,
+                    order.sourceLocationId,
+                    primaryName,
+                    null,
+                    '',
+                    {
+                        salesOrderItemId: item.salesOrderItemId,
+                        variantId: item.variantId,
+                        suggestedLocationId: order.sourceLocationId,
+                        requiredQuantity: item.requiredQuantity,
+                    },
+                );
                 return;
             }
 
@@ -354,20 +403,28 @@ export class PickTaskService {
                 if (take <= 0) {
                     continue;
                 }
-                addAllocation(bucket.zoneKey, bucket.zoneId, bucket.zoneName, {
-                    salesOrderItemId: item.salesOrderItemId,
-                    variantId: item.variantId,
-                    suggestedLocationId: bucket.bestShelfId,
-                    requiredQuantity: take,
-                });
+                addAllocation(
+                    bucket.zoneKey,
+                    bucket.siteId,
+                    bucket.siteName,
+                    bucket.zoneId,
+                    bucket.zoneName,
+                    {
+                        salesOrderItemId: item.salesOrderItemId,
+                        variantId: item.variantId,
+                        suggestedLocationId: bucket.bestShelfId,
+                        requiredQuantity: take,
+                    },
+                );
                 remaining -= take;
             }
         };
 
-        // 1. menet: egy-zónás vagy DEDICATED polcos tételek
+        // 1. menet: egy-zónás vagy DEDICATED polcos tételek (Központi Hub előnyben)
         for (const item of pass1Items) {
             const buckets = [...(zonesByVariant.get(item.variantId) ?? [])];
             buckets.sort((a, b) => {
+                if (a.isPrimarySite !== b.isPrimarySite) return a.isPrimarySite ? -1 : 1;
                 if (a.hasDedicated !== b.hasDedicated) return a.hasDedicated ? -1 : 1;
                 const aCovers = a.totalQty >= item.requiredQuantity ? 1 : 0;
                 const bCovers = b.totalQty >= item.requiredQuantity ? 1 : 0;
@@ -378,10 +435,11 @@ export class PickTaskService {
             allocateItemAcrossBuckets(item, buckets);
         }
 
-        // 2. menet: több MIXED zónás tételek -> már aktív zónák előnyben
+        // 2. menet: több MIXED zónás tételek -> Hub-elsőbbség, majd aktív zónák előnyben
         for (const item of pass2Items) {
             const buckets = [...(zonesByVariant.get(item.variantId) ?? [])];
             buckets.sort((a, b) => {
+                if (a.isPrimarySite !== b.isPrimarySite) return a.isPrimarySite ? -1 : 1;
                 const aActive = activeZoneKeys.has(a.zoneKey) ? 1 : 0;
                 const bActive = activeZoneKeys.has(b.zoneKey) ? 1 : 0;
                 const aActiveFull = aActive && a.totalQty >= item.requiredQuantity ? 1 : 0;
@@ -398,6 +456,11 @@ export class PickTaskService {
         }
 
         const sortedGroups = Array.from(allocationsByZoneKey.values()).sort((a, b) => {
+            const aPrim = a.siteId === order.sourceLocationId ? 0 : 1;
+            const bPrim = b.siteId === order.sourceLocationId ? 0 : 1;
+            if (aPrim !== bPrim) return aPrim - bPrim;
+            const siteCmp = HU_COLLATOR.compare(a.siteName, b.siteName);
+            if (siteCmp !== 0) return siteCmp;
             if (a.zoneId === null && b.zoneId !== null) return 1;
             if (a.zoneId !== null && b.zoneId === null) return -1;
             return HU_COLLATOR.compare(a.zoneName, b.zoneName);
@@ -414,7 +477,7 @@ export class PickTaskService {
                 data: {
                     taskNumber: taskNumbers[i],
                     salesOrderId: order.id,
-                    sourceLocationId: order.sourceLocationId,
+                    sourceLocationId: group.siteId,
                     zoneId: group.zoneId,
                     status: PickTaskStatus.OPEN,
                     items: {
@@ -438,6 +501,30 @@ export class PickTaskService {
         return createdTasks;
     }
 
+    private async buildClusterOrSiteLocationWhere(
+        user: AuthUser,
+        sourceLocationId: string,
+    ): Promise<Prisma.LocationWhereInput> {
+        const prismaTx = this.prisma as unknown as Prisma.TransactionClient;
+        const cluster = await resolveClusterInfo(prismaTx, sourceLocationId);
+        if (cluster.hubId !== sourceLocationId || cluster.siteIds.length <= 1) {
+            return this.buildSubtreeLocationWhere(sourceLocationId);
+        }
+
+        const scope = await this.locationAccessService.getScopeContext(user);
+        const visibleSiteIds = scope.isUnbound
+            ? cluster.siteIds
+            : cluster.siteIds.filter((sId) => scope.accessibleIds.has(sId));
+
+        if (visibleSiteIds.length <= 1) {
+            return this.buildSubtreeLocationWhere(sourceLocationId);
+        }
+
+        return {
+            OR: visibleSiteIds.map((sId) => this.buildSubtreeLocationWhere(sId)),
+        };
+    }
+
     async findAll(user: AuthUser, options?: FindPickTasksOptions) {
         if (options?.sourceLocationId) {
             this.assertValidUuid(options.sourceLocationId, 'sourceLocationId');
@@ -451,7 +538,7 @@ export class PickTaskService {
         }
 
         const locationWhere = options?.sourceLocationId
-            ? this.buildSubtreeLocationWhere(options.sourceLocationId)
+            ? await this.buildClusterOrSiteLocationWhere(user, options.sourceLocationId)
             : await this.locationAccessService.accessibleWhere(user);
 
         const q = options?.search?.trim();
@@ -551,7 +638,7 @@ export class PickTaskService {
         }
 
         const locationWhere = sourceLocationId
-            ? this.buildSubtreeLocationWhere(sourceLocationId)
+            ? await this.buildClusterOrSiteLocationWhere(user, sourceLocationId)
             : await this.locationAccessService.accessibleWhere(user);
 
         const rawTasks = await this.prisma.pickTask.findMany({
@@ -695,6 +782,12 @@ export class PickTaskService {
         });
 
         routeItems.sort((a, b) => {
+            if (sourceLocationId && a.sourceLocationId !== b.sourceLocationId) {
+                if (a.sourceLocationId === sourceLocationId) return -1;
+                if (b.sourceLocationId === sourceLocationId) return 1;
+            }
+            const siteCmp = HU_COLLATOR.compare(a.sourceLocationName, b.sourceLocationName);
+            if (siteCmp !== 0) return siteCmp;
             const zoneCmp = HU_COLLATOR.compare(
                 a.zoneName ?? '\uffff',
                 b.zoneName ?? '\uffff',
@@ -1330,39 +1423,70 @@ export class PickTaskService {
             );
         }
 
-        const subtreeMap = await this.loadSubtreeLocations(this.prisma, task.sourceLocationId);
-
         let resolvedDropoffLocationId: string | null = null;
         let resolvedDropoffCode: string | null = null;
 
         if (hasLocationId) {
-            const locNode = subtreeMap.get(dto.dropoffLocationId!.trim());
+            const targetId = dto.dropoffLocationId!.trim();
+            const locNode = await this.prisma.location.findUnique({
+                where: { id: targetId },
+                select: { id: true, name: true, isActive: true },
+            });
             if (!locNode) {
-                throw new BadRequestException(
-                    'A megadott leadási helyszín nem található a feladat telephelyén belül',
-                );
+                throw new NotFoundException('A megadott leadási helyszín nem található');
             }
             if (!locNode.isActive) {
                 throw new BadRequestException('Inaktív helyszínre nem adható le kiszedett áru');
             }
+            await this.locationAccessService.assertCanAccess(user, locNode.id);
             resolvedDropoffLocationId = locNode.id;
             resolvedDropoffCode = hasCode ? rawCode : locNode.name;
         } else if (hasCode) {
             resolvedDropoffCode = rawCode;
-            if (UUID_REGEX.test(rawCode)) {
-                const byId = subtreeMap.get(rawCode);
-                if (byId && byId.isActive) {
-                    resolvedDropoffLocationId = byId.id;
-                    resolvedDropoffCode = byId.name;
-                }
+            const isUuid = UUID_REGEX.test(rawCode);
+            const scopeWhere = await this.locationAccessService.accessibleWhere(user);
+
+            const matchInSubtree = async (rootSiteId: string) => {
+                const subtreeWhere = this.buildSubtreeLocationWhere(rootSiteId);
+                return this.prisma.location.findFirst({
+                    where: {
+                        AND: [
+                            subtreeWhere,
+                            scopeWhere,
+                            { isActive: true },
+                            isUuid
+                                ? { id: rawCode }
+                                : { name: { equals: rawCode, mode: 'insensitive' } },
+                        ],
+                    },
+                    select: { id: true, name: true },
+                    orderBy: [{ isDropoffLocation: 'desc' }, { name: 'asc' }],
+                });
+            };
+
+            let matched = await matchInSubtree(task.salesOrder.sourceLocationId);
+            if (!matched && task.sourceLocationId !== task.salesOrder.sourceLocationId) {
+                matched = await matchInSubtree(task.sourceLocationId);
             }
-            if (!resolvedDropoffLocationId) {
-                const byName = Array.from(subtreeMap.values()).find(
-                    (loc) => loc.isActive && loc.name.toLowerCase() === rawCode.toLowerCase(),
-                );
-                if (byName) {
-                    resolvedDropoffLocationId = byName.id;
-                }
+            if (!matched) {
+                matched = await this.prisma.location.findFirst({
+                    where: {
+                        AND: [
+                            scopeWhere,
+                            { isActive: true },
+                            isUuid
+                                ? { id: rawCode }
+                                : { name: { equals: rawCode, mode: 'insensitive' } },
+                        ],
+                    },
+                    select: { id: true, name: true },
+                    orderBy: [{ isDropoffLocation: 'desc' }, { name: 'asc' }],
+                });
+            }
+
+            if (matched) {
+                resolvedDropoffLocationId = matched.id;
+                resolvedDropoffCode = matched.name;
             }
         } else {
             resolvedDropoffLocationId = null;

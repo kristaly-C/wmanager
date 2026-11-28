@@ -18,7 +18,9 @@ import {
 } from '../common/cost-price';
 import {
     acquireSiteVariantLocks,
+    getClusterVariantAvailability,
     getSiteVariantAvailability,
+    resolveClusterInfo,
 } from '../common/sales-reservation';
 import { Prisma } from '../generated/prisma/client';
 import {
@@ -93,6 +95,14 @@ export class SalesOrderService {
                 : 50;
 
         const andClauses: Prisma.SalesOrderWhereInput[] = [];
+        if (options?.sourceLocationId) {
+            andClauses.push({
+                OR: [
+                    { sourceLocation: locationWhere },
+                    { pickTasks: { some: { dropoffLocation: locationWhere } } },
+                ],
+            });
+        }
         if (options?.status) {
             andClauses.push({ status: options.status });
         }
@@ -101,7 +111,7 @@ export class SalesOrderService {
         }
 
         const where: Prisma.SalesOrderWhereInput = {
-            sourceLocation: locationWhere,
+            ...(!options?.sourceLocationId ? { sourceLocation: locationWhere } : {}),
             ...(options?.channel ? { channel: options.channel } : {}),
             ...(andClauses.length > 0 ? { AND: andClauses } : {}),
             ...(q
@@ -173,6 +183,35 @@ export class SalesOrderService {
         return { items, total, onHoldCount };
     }
 
+    private async getOrderClusterSiteIdsInTx(
+        tx: Prisma.TransactionClient,
+        sourceLocationId: string,
+        isPickup: boolean,
+    ): Promise<string[]> {
+        if (!isPickup) {
+            const cluster = await resolveClusterInfo(tx, sourceLocationId);
+            if (cluster.hubId === sourceLocationId && cluster.siteIds.length > 1) {
+                return cluster.siteIds;
+            }
+        }
+        return [sourceLocationId];
+    }
+
+    private async getEffectiveOrderAvailabilityInTx(
+        tx: Prisma.TransactionClient,
+        sourceLocationId: string,
+        isPickup: boolean,
+        variantIds: string[],
+    ) {
+        if (!isPickup) {
+            const cluster = await resolveClusterInfo(tx, sourceLocationId);
+            if (cluster.hubId === sourceLocationId && cluster.siteIds.length > 1) {
+                return getClusterVariantAvailability(tx, cluster.hubId, variantIds);
+            }
+        }
+        return getSiteVariantAvailability(tx, sourceLocationId, variantIds);
+    }
+
     private rankFulfillmentSites<
         T extends {
             locationId: string;
@@ -184,6 +223,8 @@ export class SalesOrderService {
             missingQty: number;
             totalOrderedQty: number;
             canFulfillAll: boolean;
+            localCoveredQty?: number;
+            clusterMemberNames?: string[];
         },
     >(sites: T[]): { ranked: T[]; winner: T | null; recommendationReason: string | null } {
         const eligible = sites.filter((site) => site.canFulfillWebshop);
@@ -205,11 +246,19 @@ export class SalesOrderService {
         });
 
         const winner = pool[0]!;
+        const usedNeighbor =
+            typeof winner.localCoveredQty === 'number' &&
+            winner.coveredQty > winner.localCoveredQty &&
+            (winner.clusterMemberNames?.length ?? 0) > 0;
+        const clusterLabel = usedNeighbor
+            ? `Közös körzet (${winner.locationName} + ${winner.clusterMemberNames!.join(', ')}): `
+            : '';
+
         let recommendationReason: string;
         if (winner.canFulfillAll) {
-            recommendationReason = `Teljes készlet helyben (${winner.coveredQty}/${winner.totalOrderedQty} db, #${winner.fulfillmentPriority} prioritás)`;
+            recommendationReason = `${clusterLabel}Teljes készlet elérhető (${winner.coveredQty}/${winner.totalOrderedQty} db, #${winner.fulfillmentPriority} prioritás)`;
         } else if (winner.coveredQty > 0) {
-            recommendationReason = `Legkevesebb árumozgatás: ${winner.coveredQty}/${winner.totalOrderedQty} db helyben, ${winner.missingQty} db átkérés szükséges`;
+            recommendationReason = `${clusterLabel}Legkevesebb árumozgatás: ${winner.coveredQty}/${winner.totalOrderedQty} db helyben, ${winner.missingQty} db átkérés szükséges`;
         } else {
             recommendationReason =
                 'Nincs szabad készlet a hálózatban — elsődleges telephelyre irányítva (ON_HOLD)';
@@ -278,17 +327,25 @@ export class SalesOrderService {
                 type: true,
                 canFulfillWebshop: true,
                 fulfillmentPriority: true,
+                dispatchHubLocationId: true,
             },
             orderBy: [{ fulfillmentPriority: 'asc' }, { type: 'asc' }, { name: 'asc' }],
         });
 
+        const satellitesByHubId = new Map<string, string[]>();
+        for (const site of sites) {
+            if (site.dispatchHubLocationId) {
+                const list = satellitesByHubId.get(site.dispatchHubLocationId) ?? [];
+                list.push(site.name);
+                satellitesByHubId.set(site.dispatchHubLocationId, list);
+            }
+        }
+
+        const prismaTx = this.prisma as unknown as Prisma.TransactionClient;
+
         const siteAvailabilities = await Promise.all(
             sites.map(async (site) => {
-                const map = await getSiteVariantAvailability(
-                    this.prisma as unknown as Prisma.TransactionClient,
-                    site.id,
-                    variantIds,
-                );
+                const map = await getSiteVariantAvailability(prismaTx, site.id, variantIds);
 
                 let coveredQty = 0;
                 const variants = variantIds.map((variantId) => {
@@ -314,6 +371,31 @@ export class SalesOrderService {
 
                 const missingQty = Math.max(0, totalOrderedQty - coveredQty);
                 const canFulfillAll = missingQty === 0;
+                const clusterMemberNames = satellitesByHubId.get(site.id) ?? [];
+
+                let clusterCoveredQty = coveredQty;
+                let clusterMissingQty = missingQty;
+                let clusterCanFulfillAll = canFulfillAll;
+
+                if (clusterMemberNames.length > 0 && site.dispatchHubLocationId === null) {
+                    const clusterMap = await getClusterVariantAvailability(
+                        prismaTx,
+                        site.id,
+                        variantIds,
+                    );
+                    let sumCluster = 0;
+                    for (const variantId of variantIds) {
+                        const reqQty = requiredByVariant.get(variantId) ?? 1;
+                        const availQty = Math.max(
+                            0,
+                            clusterMap.get(variantId)?.availableQty ?? 0,
+                        );
+                        sumCluster += Math.min(reqQty, availQty);
+                    }
+                    clusterCoveredQty = sumCluster;
+                    clusterMissingQty = Math.max(0, totalOrderedQty - sumCluster);
+                    clusterCanFulfillAll = clusterMissingQty === 0;
+                }
 
                 return {
                     locationId: site.id,
@@ -321,19 +403,39 @@ export class SalesOrderService {
                     locationType: site.type,
                     canFulfillWebshop: site.canFulfillWebshop,
                     fulfillmentPriority: site.fulfillmentPriority,
+                    dispatchHubLocationId: site.dispatchHubLocationId,
+                    clusterMemberNames,
                     coveredQty,
                     missingQty,
                     totalOrderedQty,
                     canFulfillAll,
+                    clusterCoveredQty,
+                    clusterMissingQty,
+                    clusterCanFulfillAll,
                     variants,
                 };
             }),
         );
 
-        const eligibleSites = siteAvailabilities.filter((site) => site.canFulfillWebshop);
+        const topLevelEligible = siteAvailabilities.filter(
+            (site) => site.canFulfillWebshop && site.dispatchHubLocationId === null,
+        );
+        const eligiblePool =
+            topLevelEligible.length > 0
+                ? topLevelEligible
+                : siteAvailabilities.filter((site) => site.canFulfillWebshop);
+
         const routing =
-            eligibleSites.length > 0
-                ? this.rankFulfillmentSites(eligibleSites)
+            eligiblePool.length > 0
+                ? this.rankFulfillmentSites(
+                      eligiblePool.map((site) => ({
+                          ...site,
+                          localCoveredQty: site.coveredQty,
+                          coveredQty: site.clusterCoveredQty,
+                          missingQty: site.clusterMissingQty,
+                          canFulfillAll: site.clusterCanFulfillAll,
+                      })),
+                  )
                 : { winner: null, recommendationReason: null };
 
         const flatItems = siteAvailabilities.flatMap((site) =>
@@ -528,7 +630,7 @@ export class SalesOrderService {
             await this.validateActiveSiteLocation(dto.sourceLocationId, 'forrás telephely');
         } else {
             const scope = await this.locationAccessService.getScopeContext(user);
-            candidateSites = await this.prisma.location.findMany({
+            const allWebshopSites = await this.prisma.location.findMany({
                 where: {
                     isActive: true,
                     canFulfillWebshop: true,
@@ -543,9 +645,15 @@ export class SalesOrderService {
                     type: true,
                     canFulfillWebshop: true,
                     fulfillmentPriority: true,
+                    dispatchHubLocationId: true,
                 },
                 orderBy: [{ fulfillmentPriority: 'asc' }, { type: 'asc' }, { name: 'asc' }],
             });
+
+            const topLevelHubs = allWebshopSites.filter(
+                (site) => site.dispatchHubLocationId === null,
+            );
+            candidateSites = topLevelHubs.length > 0 ? topLevelHubs : allWebshopSites;
 
             if (candidateSites.length === 0) {
                 throw new BadRequestException(
@@ -558,8 +666,16 @@ export class SalesOrderService {
 
         const createdOrderId = await this.prisma.$transaction(async (tx) => {
             const siteIdsToLock = dto.sourceLocationId
-                ? [dto.sourceLocationId]
-                : candidateSites.map((s) => s.id);
+                ? await this.getOrderClusterSiteIdsInTx(tx, dto.sourceLocationId, isPickup)
+                : Array.from(
+                      new Set(
+                          (
+                              await Promise.all(
+                                  candidateSites.map((s) => resolveClusterInfo(tx, s.id)),
+                              )
+                          ).flatMap((cluster) => cluster.siteIds),
+                      ),
+                  );
 
             await acquireSiteVariantLocks(
                 tx,
@@ -580,15 +696,16 @@ export class SalesOrderService {
 
             if (dto.sourceLocationId) {
                 resolvedSourceLocationId = dto.sourceLocationId;
-                availabilityMap = await getSiteVariantAvailability(
+                availabilityMap = await this.getEffectiveOrderAvailabilityInTx(
                     tx,
                     resolvedSourceLocationId,
+                    isPickup,
                     variantIds,
                 );
             } else {
                 const evaluated = await Promise.all(
                     candidateSites.map(async (site) => {
-                        const map = await getSiteVariantAvailability(tx, site.id, variantIds);
+                        const map = await getClusterVariantAvailability(tx, site.id, variantIds);
                         availabilityMapBySite.set(site.id, map);
                         let coveredQty = 0;
                         for (const item of dto.items) {
@@ -914,12 +1031,21 @@ export class SalesOrderService {
             const lockVariantIds = Array.from(
                 new Set([...current.items.map((i) => i.variantId), ...newVariantIds]),
             );
+            const nextIsPickup =
+                dto.isPickup !== undefined ? dto.isPickup : current.isPickup;
+            const lockSiteIds = await this.getOrderClusterSiteIdsInTx(
+                tx,
+                current.sourceLocationId,
+                nextIsPickup,
+            );
             await acquireSiteVariantLocks(
                 tx,
-                lockVariantIds.map((variantId) => ({
-                    siteLocationId: current.sourceLocationId,
-                    variantId,
-                })),
+                lockSiteIds.flatMap((siteLocationId) =>
+                    lockVariantIds.map((variantId) => ({
+                        siteLocationId,
+                        variantId,
+                    })),
+                ),
             );
 
             await tx.pickTask.deleteMany({
@@ -933,9 +1059,10 @@ export class SalesOrderService {
                 where: { salesOrderId: id },
             });
 
-            const availabilityMap = await getSiteVariantAvailability(
+            const availabilityMap = await this.getEffectiveOrderAvailabilityInTx(
                 tx,
                 current.sourceLocationId,
+                nextIsPickup,
                 newVariantIds,
             );
 
@@ -1078,17 +1205,26 @@ export class SalesOrderService {
             }
 
             const variantIds = current.items.map((item) => item.variantId);
-            const lockPairs = [
-                ...variantIds.map((variantId) => ({
-                    siteLocationId: current.sourceLocationId,
-                    variantId,
-                })),
-                ...variantIds.map((variantId) => ({
-                    siteLocationId: dto.sourceLocationId,
-                    variantId,
-                })),
-            ];
-            await acquireSiteVariantLocks(tx, lockPairs);
+            const oldClusterIds = await this.getOrderClusterSiteIdsInTx(
+                tx,
+                current.sourceLocationId,
+                current.isPickup,
+            );
+            const newClusterIds = await this.getOrderClusterSiteIdsInTx(
+                tx,
+                dto.sourceLocationId,
+                current.isPickup,
+            );
+            const uniqueLockSites = Array.from(new Set([...oldClusterIds, ...newClusterIds]));
+            await acquireSiteVariantLocks(
+                tx,
+                uniqueLockSites.flatMap((siteLocationId) =>
+                    variantIds.map((variantId) => ({
+                        siteLocationId,
+                        variantId,
+                    })),
+                ),
+            );
 
             await tx.pickTask.deleteMany({
                 where: {
@@ -1110,9 +1246,10 @@ export class SalesOrderService {
                 },
             });
 
-            const availabilityMap = await getSiteVariantAvailability(
+            const availabilityMap = await this.getEffectiveOrderAvailabilityInTx(
                 tx,
                 dto.sourceLocationId,
+                current.isPickup,
                 variantIds,
             );
 
@@ -1261,17 +1398,25 @@ export class SalesOrderService {
             }
 
             const variantIds = current.items.map((i) => i.variantId);
-            await acquireSiteVariantLocks(
-                tx,
-                variantIds.map((variantId) => ({
-                    siteLocationId: current.sourceLocationId,
-                    variantId,
-                })),
-            );
-
-            const availabilityMap = await getSiteVariantAvailability(
+            const lockSiteIds = await this.getOrderClusterSiteIdsInTx(
                 tx,
                 current.sourceLocationId,
+                current.isPickup,
+            );
+            await acquireSiteVariantLocks(
+                tx,
+                lockSiteIds.flatMap((siteLocationId) =>
+                    variantIds.map((variantId) => ({
+                        siteLocationId,
+                        variantId,
+                    })),
+                ),
+            );
+
+            const availabilityMap = await this.getEffectiveOrderAvailabilityInTx(
+                tx,
+                current.sourceLocationId,
+                current.isPickup,
                 variantIds,
             );
 
@@ -1602,12 +1747,19 @@ export class SalesOrderService {
             }
 
             const variantIds = current.items.map((item) => item.variantId);
+            const lockSiteIds = await this.getOrderClusterSiteIdsInTx(
+                tx,
+                current.sourceLocationId,
+                current.isPickup,
+            );
             await acquireSiteVariantLocks(
                 tx,
-                variantIds.map((variantId) => ({
-                    siteLocationId: current.sourceLocationId,
-                    variantId,
-                })),
+                lockSiteIds.flatMap((siteLocationId) =>
+                    variantIds.map((variantId) => ({
+                        siteLocationId,
+                        variantId,
+                    })),
+                ),
             );
 
             const activeSaleMovements = await tx.stockMovement.findMany({

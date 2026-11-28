@@ -202,11 +202,24 @@ function canModifyTask(task: PickTaskDetail): boolean {
   return !task.assignedToUserId || task.assignedToUserId === currentUserId.value
 }
 
-function isLocationInSubtree(locationId: string, rootId: string): boolean {
+function getRootSiteId(locationId: string): string | null {
   let current: LocationItem | undefined = locationById.value.get(locationId)
   const visited = new Set<string>()
   while (current && !visited.has(current.id)) {
-    if (current.id === rootId) return true
+    visited.add(current.id)
+    if (current.type === LocationType.WAREHOUSE || current.type === LocationType.STORE) {
+      return current.id
+    }
+    current = current.parentId ? locationById.value.get(current.parentId) : undefined
+  }
+  return null
+}
+
+function isLocationOrAncestorDropoff(locationId: string): boolean {
+  let current: LocationItem | undefined = locationById.value.get(locationId)
+  const visited = new Set<string>()
+  while (current && !visited.has(current.id)) {
+    if (current.isDropoffLocation) return true
     visited.add(current.id)
     current = current.parentId ? locationById.value.get(current.parentId) : undefined
   }
@@ -222,24 +235,38 @@ function formatLocationPath(locationId: string, fallbackName?: string): string {
 const detailDropoffShelfOptions = computed(() => {
   const detail = selectedTaskDetail.value
   if (!detail) return []
-  const rootId = detail.sourceLocationId
+  const taskSite = locationById.value.get(detail.sourceLocationId)
+  const preferredHubId =
+    detail.sourceLocation.dispatchHubLocationId ??
+    taskSite?.dispatchHubLocationId ??
+    detail.sourceLocationId
+
   return allLocations.value
     .filter(
       (loc) =>
         loc.isActive &&
         loc.isAssigned !== false &&
-        loc.id !== rootId &&
-        isLocationInSubtree(loc.id, rootId),
+        loc.type !== LocationType.WAREHOUSE &&
+        loc.type !== LocationType.STORE,
     )
     .map((loc) => {
       const pathLabel = formatLocationPath(loc.id, loc.name)
+      const isDropoff = isLocationOrAncestorDropoff(loc.id)
+      const isPreferredHub = getRootSiteId(loc.id) === preferredHubId
       const dedicatedSuffix = loc.slotMode === SlotMode.DEDICATED ? ' · DEDICATED' : ''
+      const dropoffPrefix = isDropoff ? '[Lerakó] ' : ''
       return {
         id: loc.id,
-        label: `${pathLabel} (${LOCATION_TYPE_META[loc.type].label}${dedicatedSuffix})`,
+        isDropoff,
+        isPreferredHub,
+        label: `${dropoffPrefix}${pathLabel} (${LOCATION_TYPE_META[loc.type].label}${dedicatedSuffix})`,
       }
     })
-    .sort((a, b) => a.label.localeCompare(b.label, 'hu', { numeric: true }))
+    .sort((a, b) => {
+      if (a.isDropoff !== b.isDropoff) return a.isDropoff ? -1 : 1
+      if (a.isPreferredHub !== b.isPreferredHub) return a.isPreferredHub ? -1 : 1
+      return a.label.localeCompare(b.label, 'hu', { numeric: true })
+    })
 })
 
 const selectableOpenTasksOnPage = computed(() =>

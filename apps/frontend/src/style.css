@@ -4,3 +4,8 @@
 html {
     scrollbar-gutter: stable;
 }
+
+html,
+body {
+    overscroll-behavior-y: contain;
+}

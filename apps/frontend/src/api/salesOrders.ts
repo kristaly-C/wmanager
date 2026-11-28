@@ -199,10 +199,15 @@ export interface SalesOrderLocationAvailability {
   locationType: LocationType
   canFulfillWebshop?: boolean
   fulfillmentPriority?: number
+  dispatchHubLocationId?: string | null
+  clusterMemberNames?: string[]
   coveredQty: number
   missingQty: number
   totalOrderedQty: number
   canFulfillAll: boolean
+  clusterCoveredQty?: number
+  clusterMissingQty?: number
+  clusterCanFulfillAll?: boolean
   variants: SalesOrderVariantAvailabilityRow[]
 }
 

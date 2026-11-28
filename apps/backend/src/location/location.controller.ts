@@ -80,12 +80,13 @@ export class LocationController {
     {
         if (
             (updateLocation.canFulfillWebshop !== undefined ||
-                updateLocation.fulfillmentPriority !== undefined) &&
+                updateLocation.fulfillmentPriority !== undefined ||
+                updateLocation.dispatchHubLocationId !== undefined) &&
             user.role !== Role.ADMIN &&
             user.role !== Role.BOSS
         ) {
             throw new ForbiddenException(
-                'A webshop teljesítési beállításokat és prioritást csak ADMIN vagy BOSS módosíthatja',
+                'A webshop teljesítési és közös kiszállítási központ beállításokat csak ADMIN vagy BOSS módosíthatja',
             );
         }
 

@@ -73,6 +73,75 @@ export class LocationService extends BaseService<PrismaService['location']> {
         }
     }
 
+    private assertValidDropoffFlag(type: LocationType, isDropoffLocation?: boolean) {
+        if (
+            isDropoffLocation === true &&
+            (type === LocationType.WAREHOUSE || type === LocationType.STORE)
+        ) {
+            throw new BadRequestException(
+                'A lerakóhely (isDropoffLocation) jelölés csak ZONE, SHELF vagy BIN pozíción engedélyezett',
+            );
+        }
+    }
+
+    private async assertValidDispatchHub(
+        type: LocationType,
+        currentId: string | null,
+        dispatchHubLocationId?: string | null,
+    ) {
+        if (dispatchHubLocationId === undefined || dispatchHubLocationId === null) {
+            return;
+        }
+
+        if (type !== LocationType.WAREHOUSE && type !== LocationType.STORE) {
+            throw new BadRequestException(
+                'A közös kiszállítási központ (dispatchHubLocationId) csak WAREHOUSE vagy STORE telephelyen állítható',
+            );
+        }
+
+        if (currentId && dispatchHubLocationId === currentId) {
+            throw new BadRequestException(
+                'Egy telephely nem lehet saját maga kiszállítási központja',
+            );
+        }
+
+        const hub = await this.prisma.location.findUnique({
+            where: { id: dispatchHubLocationId },
+            select: {
+                id: true,
+                type: true,
+                isActive: true,
+                dispatchHubLocationId: true,
+            },
+        });
+        if (
+            !hub ||
+            !hub.isActive ||
+            (hub.type !== LocationType.WAREHOUSE && hub.type !== LocationType.STORE)
+        ) {
+            throw new BadRequestException(
+                'A választott közös kiszállítási központ nem aktív raktár vagy üzlet',
+            );
+        }
+
+        if (hub.dispatchHubLocationId !== null) {
+            throw new BadRequestException(
+                'A választott központ már egy másik központhoz tartozik (maximum 1 szintű összekapcsolás engedélyezett)',
+            );
+        }
+
+        if (currentId) {
+            const linkedCount = await this.prisma.location.count({
+                where: { dispatchHubLocationId: currentId },
+            });
+            if (linkedCount > 0) {
+                throw new BadRequestException(
+                    'Ehhez a telephelyhez már tartoznak kapcsolt épületek, ezért nem rendelhető másik központ alá',
+                );
+            }
+        }
+    }
+
     async createLocation(data: CreateLocationDto) {
         await this.assertValidPlacement(data.type, data.parentId);
         this.assertValidSlotMode(data.type, data.slotMode);
@@ -81,6 +150,8 @@ export class LocationService extends BaseService<PrismaService['location']> {
             data.canFulfillWebshop,
             data.fulfillmentPriority,
         );
+        this.assertValidDropoffFlag(data.type, data.isDropoffLocation);
+        await this.assertValidDispatchHub(data.type, null, data.dispatchHubLocationId);
 
         const defaultPriority = data.type === LocationType.WAREHOUSE ? 10 : 100;
         return super.create({
@@ -92,6 +163,8 @@ export class LocationService extends BaseService<PrismaService['location']> {
             parentId: data.parentId ?? null,
             canFulfillWebshop: data.canFulfillWebshop ?? true,
             fulfillmentPriority: data.fulfillmentPriority ?? defaultPriority,
+            dispatchHubLocationId: data.dispatchHubLocationId ?? null,
+            isDropoffLocation: data.isDropoffLocation ?? false,
         });
     }
 
@@ -112,6 +185,16 @@ export class LocationService extends BaseService<PrismaService['location']> {
                 current.type,
                 data.canFulfillWebshop,
                 data.fulfillmentPriority,
+            );
+        }
+        if (data.isDropoffLocation !== undefined) {
+            this.assertValidDropoffFlag(current.type, data.isDropoffLocation);
+        }
+        if (data.dispatchHubLocationId !== undefined) {
+            await this.assertValidDispatchHub(
+                current.type,
+                id,
+                data.dispatchHubLocationId,
             );
         }
     

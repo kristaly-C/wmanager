@@ -17,6 +17,12 @@ export interface SiteVariantAvailability {
     availableQty: number;
 }
 
+export interface FulfillmentClusterInfo {
+    hubId: string;
+    siteIds: string[];
+    satelliteIds: string[];
+}
+
 export async function acquireSiteVariantLocks(
     tx: Prisma.TransactionClient,
     pairs: Array<{ siteLocationId: string; variantId: string }>,
@@ -156,6 +162,101 @@ export async function getSiteVariantAvailability(
     return result;
 }
 
+export async function resolveClusterInfo(
+    tx: Prisma.TransactionClient,
+    siteLocationId: string,
+): Promise<FulfillmentClusterInfo> {
+    const site = await tx.location.findUnique({
+        where: { id: siteLocationId },
+        select: { id: true, dispatchHubLocationId: true },
+    });
+    const hubId = site?.dispatchHubLocationId ?? siteLocationId;
+
+    const satellites = await tx.location.findMany({
+        where: {
+            dispatchHubLocationId: hubId,
+            isActive: true,
+        },
+        select: { id: true },
+        orderBy: { name: 'asc' },
+    });
+
+    const satelliteIds = satellites.map((s) => s.id).filter((id) => id !== hubId);
+    return {
+        hubId,
+        siteIds: [hubId, ...satelliteIds],
+        satelliteIds,
+    };
+}
+
+export async function getClusterVariantAvailability(
+    tx: Prisma.TransactionClient,
+    siteLocationId: string,
+    variantIds: string[],
+): Promise<Map<string, SiteVariantAvailability>> {
+    const uniqueVariantIds = Array.from(new Set(variantIds));
+    const result = new Map<string, SiteVariantAvailability>();
+    if (uniqueVariantIds.length === 0) {
+        return result;
+    }
+
+    const cluster = await resolveClusterInfo(tx, siteLocationId);
+    if (cluster.siteIds.length <= 1) {
+        return getSiteVariantAvailability(tx, cluster.hubId, uniqueVariantIds);
+    }
+
+    const subtreeLists = await Promise.all(
+        cluster.siteIds.map((id) => getSubtreeLocationIds(tx, id)),
+    );
+    const subtreeLocationIds = Array.from(new Set(subtreeLists.flat()));
+
+    const [stockSums, reservedSums] = await Promise.all([
+        tx.stockItem.groupBy({
+            by: ['variantId'],
+            where: {
+                locationId: { in: subtreeLocationIds },
+                variantId: { in: uniqueVariantIds },
+            },
+            _sum: { quantity: true },
+        }),
+        tx.salesOrderItem.groupBy({
+            by: ['variantId'],
+            where: {
+                variantId: { in: uniqueVariantIds },
+                salesOrder: {
+                    sourceLocationId: { in: cluster.siteIds },
+                    status: { in: ACTIVE_RESERVATION_ORDER_STATUSES },
+                },
+            },
+            _sum: { reservedQuantity: true },
+        }),
+    ]);
+
+    const totalByVariant = new Map<string, number>();
+    for (const row of stockSums) {
+        totalByVariant.set(row.variantId, row._sum.quantity ?? 0);
+    }
+
+    const reservedByVariant = new Map<string, number>();
+    for (const row of reservedSums) {
+        reservedByVariant.set(row.variantId, row._sum.reservedQuantity ?? 0);
+    }
+
+    for (const variantId of uniqueVariantIds) {
+        const totalQty = totalByVariant.get(variantId) ?? 0;
+        const reservedQty = reservedByVariant.get(variantId) ?? 0;
+        result.set(variantId, {
+            siteLocationId: cluster.hubId,
+            variantId,
+            totalQty,
+            reservedQty,
+            availableQty: totalQty - reservedQty,
+        });
+    }
+
+    return result;
+}
+
 export async function assertSiteStockCanDecrease(
     tx: Prisma.TransactionClient,
     locationId: string,
@@ -167,7 +268,12 @@ export async function assertSiteStockCanDecrease(
     }
 
     const siteLocationId = await resolveRootSiteLocationId(tx, locationId);
-    await acquireSiteVariantLocks(tx, [{ siteLocationId, variantId }]);
+    const cluster = await resolveClusterInfo(tx, siteLocationId);
+
+    await acquireSiteVariantLocks(
+        tx,
+        cluster.siteIds.map((id) => ({ siteLocationId: id, variantId })),
+    );
 
     const availabilityMap = await getSiteVariantAvailability(tx, siteLocationId, [variantId]);
     const availability = availabilityMap.get(variantId) ?? {
@@ -183,5 +289,23 @@ export async function assertSiteStockCanDecrease(
             `A készlet nem csökkenthető ${decreaseQty} db-bal, mert az aktív vevői rendelések foglalása alá esne ` +
                 `(összes telephelyi készlet: ${availability.totalQty} db, aktív foglalás: ${availability.reservedQty} db, szabad készlet: ${availability.availableQty} db).`,
         );
+    }
+
+    if (cluster.siteIds.length > 1) {
+        const clusterMap = await getClusterVariantAvailability(tx, cluster.hubId, [variantId]);
+        const clusterAvail = clusterMap.get(variantId) ?? {
+            siteLocationId: cluster.hubId,
+            variantId,
+            totalQty: 0,
+            reservedQty: 0,
+            availableQty: 0,
+        };
+
+        if (decreaseQty > clusterAvail.availableQty) {
+            throw new ConflictException(
+                `A készlet nem csökkenthető ${decreaseQty} db-bal, mert a közös kiszállítási körzet aktív rendeléseinek foglalása alá esne ` +
+                    `(körzet összes készlete: ${clusterAvail.totalQty} db, aktív foglalás: ${clusterAvail.reservedQty} db, szabad készlet: ${clusterAvail.availableQty} db).`,
+            );
+        }
     }
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { LocationType, Role } from '@wmanager/shared-types'
+import Select from 'primevue/select'
 import ToggleSwitch from 'primevue/toggleswitch'
 import { useToast } from 'primevue/usetoast'
 import { locationApi, type LocationItem } from '@/api/locations'
@@ -14,6 +15,7 @@ interface SiteRoutingRow {
   canFulfillWebshop: boolean
   fulfillmentPriority: number
   priorityInput: number
+  dispatchHubLocationId: string | null
 }
 
 const authStore = useAuthStore()
@@ -41,8 +43,41 @@ function sortSiteRows(rows: SiteRoutingRow[]): SiteRoutingRow[] {
 }
 
 const primaryWebshopSiteId = computed(
-  () => sites.value.find((site) => site.canFulfillWebshop)?.id ?? null,
+  () =>
+    sites.value.find(
+      (site) => site.canFulfillWebshop && site.dispatchHubLocationId === null,
+    )?.id ??
+    sites.value.find((site) => site.canFulfillWebshop)?.id ??
+    null,
 )
+
+const siteNameById = computed(() => new Map(sites.value.map((s) => [s.id, s.name])))
+
+const satellitesByHubId = computed(() => {
+  const map = new Map<string, SiteRoutingRow[]>()
+  for (const site of sites.value) {
+    if (!site.dispatchHubLocationId) continue
+    const list = map.get(site.dispatchHubLocationId) ?? []
+    list.push(site)
+    map.set(site.dispatchHubLocationId, list)
+  }
+  return map
+})
+
+function getHubOptionsForSite(siteId: string): Array<{ id: string | null; label: string }> {
+  const options: Array<{ id: string | null; label: string }> = [
+    { id: null, label: 'Önálló telephely (nincs közös hub)' },
+  ]
+  for (const candidate of sites.value) {
+    if (candidate.id === siteId) continue
+    if (candidate.dispatchHubLocationId !== null) continue
+    options.push({
+      id: candidate.id,
+      label: `${candidate.name} (${LOCATION_TYPE_META[candidate.type].label})`,
+    })
+  }
+  return options
+}
 
 async function loadSites() {
   if (!isBossOrAdmin.value) return
@@ -68,6 +103,7 @@ async function loadSites() {
           canFulfillWebshop: loc.canFulfillWebshop ?? true,
           fulfillmentPriority: prio,
           priorityInput: prio,
+          dispatchHubLocationId: loc.dispatchHubLocationId ?? null,
         }
       })
 
@@ -104,6 +140,37 @@ async function onToggleWebshop(site: SiteRoutingRow, nextValue: boolean) {
       severity: 'error',
       summary: 'Mentési hiba',
       detail: extractApiError(err, 'Nem sikerült menteni a webshop teljesítési beállítást.'),
+      life: 4500,
+    })
+  } finally {
+    savingId.value = null
+  }
+}
+
+async function onHubChange(site: SiteRoutingRow, nextHubId: string | null) {
+  if (!isBossOrAdmin.value || savingId.value) return
+  if (nextHubId === site.dispatchHubLocationId) return
+
+  const prevHubId = site.dispatchHubLocationId
+  site.dispatchHubLocationId = nextHubId
+  savingId.value = site.id
+  try {
+    await locationApi.update(site.id, { dispatchHubLocationId: nextHubId })
+    toast.add({
+      severity: 'success',
+      summary: 'Közös kiszállítási központ frissítve',
+      detail: nextHubId
+        ? `${site.name} csatlakoztatva ehhez a központhoz: ${siteNameById.value.get(nextHubId) ?? 'Hub'}.`
+        : `${site.name} önálló telephelyként működik tovább.`,
+      life: 3500,
+    })
+    await loadSites()
+  } catch (err) {
+    site.dispatchHubLocationId = prevHubId
+    toast.add({
+      severity: 'error',
+      summary: 'Kapcsolási hiba',
+      detail: extractApiError(err, 'Nem sikerült módosítani a közös kiszállítási központot.'),
       life: 4500,
     })
   } finally {
@@ -166,7 +233,6 @@ async function moveSite(index: number, delta: -1 | 1) {
   reordered[index] = neighbor
   reordered[targetIndex] = current
 
-  // Tiszta 10-es lépésközű sorrend minden aktív telephelyre, így egyértelmű lesz a rangsor
   const updates = reordered.map((row, idx) => ({
     row,
     nextPriority: (idx + 1) * 10,
@@ -226,12 +292,12 @@ onMounted(() => {
         </div>
         <div class="space-y-1">
           <h2 class="text-base font-bold text-[#171918]">
-            Webshop teljesítési sorrend & útválasztás
+            Webshop teljesítési sorrend &amp; közös csomagolási központok
           </h2>
           <p class="text-xs sm:text-sm text-[#686f6a] max-w-3xl leading-relaxed">
-            Központi raktár az elsődleges; bolt csak személyes átvételnél vagy akkor teljesít, ha
-            kevesebb terméket kell hozzá elküldeni, mint amennyit neki kellene visszaküldenie.
-            Rendelést nem bontunk ketté (split nincs). Kisebb prioritási szám = magasabb elsőbbség.
+            Központi raktár az elsődleges; egymás melletti épületek (pl. Főraktár + Budapesti Bolt)
+            közös hubba köthetők, így a vegyes rendelések <code>ON_HOLD</code> nélkül külön zónás
+            feladatként szedhetők és a központ lerakójába tehetők. Split nincs.
           </p>
         </div>
       </div>
@@ -263,94 +329,128 @@ onMounted(() => {
       <div
         v-for="(site, index) in sites"
         :key="site.id"
-        class="px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white hover:bg-[#fafbf9] transition"
+        class="px-4 py-3.5 flex flex-col gap-3 bg-white hover:bg-[#fafbf9] transition"
       >
-        <div class="flex items-center gap-3 min-w-0">
-          <div class="flex flex-col gap-0.5 shrink-0">
-            <button
-              type="button"
-              :disabled="index === 0 || savingId !== null"
-              @click="moveSite(index, -1)"
-              title="Előrébb sorolás"
-              class="w-6 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition"
-            >
-              <i class="pi pi-chevron-up text-[10px]"></i>
-            </button>
-            <button
-              type="button"
-              :disabled="index === sites.length - 1 || savingId !== null"
-              @click="moveSite(index, 1)"
-              title="Hátrébb sorolás"
-              class="w-6 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition"
-            >
-              <i class="pi pi-chevron-down text-[10px]"></i>
-            </button>
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="flex flex-col gap-0.5 shrink-0">
+              <button
+                type="button"
+                :disabled="index === 0 || savingId !== null"
+                @click="moveSite(index, -1)"
+                title="Előrébb sorolás"
+                class="w-6 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition"
+              >
+                <i class="pi pi-chevron-up text-[10px]"></i>
+              </button>
+              <button
+                type="button"
+                :disabled="index === sites.length - 1 || savingId !== null"
+                @click="moveSite(index, 1)"
+                title="Hátrébb sorolás"
+                class="w-6 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition"
+              >
+                <i class="pi pi-chevron-down text-[10px]"></i>
+              </button>
+            </div>
+
+            <div class="min-w-0 space-y-0.5">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-semibold text-sm text-[#171918]">{{ site.name }}</span>
+                <span
+                  class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200"
+                >
+                  {{ LOCATION_TYPE_META[site.type].label }}
+                </span>
+                <span
+                  v-if="site.id === primaryWebshopSiteId"
+                  class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+                >
+                  #1 Elsődleges
+                </span>
+                <span
+                  v-else-if="!site.canFulfillWebshop"
+                  class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200"
+                >
+                  Csak személyes átvétel
+                </span>
+                <span
+                  v-if="(satellitesByHubId.get(site.id)?.length ?? 0) > 0"
+                  class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200"
+                >
+                  Központ (+{{ satellitesByHubId.get(site.id)!.length }} szomszédos épület:
+                  {{ satellitesByHubId.get(site.id)!.map((s) => s.name).join(', ') }})
+                </span>
+                <span
+                  v-else-if="site.dispatchHubLocationId"
+                  class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200"
+                >
+                  Kapcsolva: {{ siteNameById.get(site.dispatchHubLocationId) ?? 'Hub' }} (szomszédos épület)
+                </span>
+              </div>
+              <p class="text-[11px] text-[#686f6a]">
+                Aktuális prioritás:
+                <span class="font-mono font-semibold text-[#171918]">#{{ site.fulfillmentPriority }}</span>
+              </p>
+            </div>
           </div>
 
-          <div class="min-w-0 space-y-0.5">
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="font-semibold text-sm text-[#171918]">{{ site.name }}</span>
-              <span
-                class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200"
+          <div class="flex flex-wrap items-center gap-3 shrink-0">
+            <div class="flex items-center gap-2">
+              <ToggleSwitch
+                :modelValue="site.canFulfillWebshop"
+                :disabled="savingId !== null"
+                :inputId="`webshop-fulfill-${site.id}`"
+                @update:modelValue="onToggleWebshop(site, $event)"
+              />
+              <label
+                :for="`webshop-fulfill-${site.id}`"
+                class="text-xs font-medium text-[#171918] cursor-pointer select-none"
               >
-                {{ LOCATION_TYPE_META[site.type].label }}
-              </span>
-              <span
-                v-if="site.id === primaryWebshopSiteId"
-                class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
-              >
-                #1 Elsődleges
-              </span>
-              <span
-                v-else-if="!site.canFulfillWebshop"
-                class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200"
-              >
-                Csak személyes átvétel
-              </span>
+                Webshop csomagküldés
+              </label>
             </div>
-            <p class="text-[11px] text-[#686f6a]">
-              Aktuális prioritás: <span class="font-mono font-semibold text-[#171918]">#{{ site.fulfillmentPriority }}</span>
-            </p>
+
+            <div class="flex items-center gap-1.5">
+              <label class="text-[11px] font-semibold text-[#686f6a]">Prioritás:</label>
+              <input
+                v-model.number="site.priorityInput"
+                type="number"
+                min="1"
+                max="9999"
+                step="1"
+                :disabled="savingId !== null"
+                @keydown.enter.prevent="savePriority(site)"
+                class="w-20 h-8 rounded-lg border border-[#dce0d8] px-2 text-xs font-mono font-semibold text-center outline-none focus:border-[#f46714]"
+              />
+              <button
+                type="button"
+                :disabled="savingId !== null || site.priorityInput === site.fulfillmentPriority"
+                @click="savePriority(site)"
+                class="h-8 px-2.5 rounded-lg bg-[#171918] hover:bg-[#2a2d2b] text-white text-[11px] font-semibold cursor-pointer disabled:opacity-40 transition"
+              >
+                Mentés
+              </button>
+            </div>
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-4 shrink-0">
-          <div class="flex items-center gap-2">
-            <ToggleSwitch
-              :modelValue="site.canFulfillWebshop"
-              :disabled="savingId !== null"
-              :inputId="`webshop-fulfill-${site.id}`"
-              @update:modelValue="onToggleWebshop(site, $event)"
-            />
-            <label
-              :for="`webshop-fulfill-${site.id}`"
-              class="text-xs font-medium text-[#171918] cursor-pointer select-none"
-            >
-              Webshop csomagküldés
-            </label>
-          </div>
-
-          <div class="flex items-center gap-1.5">
-            <label class="text-[11px] font-semibold text-[#686f6a]">Prioritás:</label>
-            <input
-              v-model.number="site.priorityInput"
-              type="number"
-              min="1"
-              max="9999"
-              step="1"
-              :disabled="savingId !== null"
-              @keydown.enter.prevent="savePriority(site)"
-              class="w-20 h-8 rounded-lg border border-[#dce0d8] px-2 text-xs font-mono font-semibold text-center outline-none focus:border-[#f46714]"
-            />
-            <button
-              type="button"
-              :disabled="savingId !== null || site.priorityInput === site.fulfillmentPriority"
-              @click="savePriority(site)"
-              class="h-8 px-2.5 rounded-lg bg-[#171918] hover:bg-[#2a2d2b] text-white text-[11px] font-semibold cursor-pointer disabled:opacity-40 transition"
-            >
-              Mentés
-            </button>
-          </div>
+        <!-- Közös kiszállítási központ (Hub) választó -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pl-9 pt-2 border-t border-[#f1f3ef]">
+          <span class="text-[11px] font-medium text-[#686f6a]">
+            Közös kiszállítási központ (szomszédos épület összekapcsolása):
+          </span>
+          <Select
+            :modelValue="site.dispatchHubLocationId"
+            :options="getHubOptionsForSite(site.id)"
+            optionLabel="label"
+            optionValue="id"
+            :disabled="
+              savingId !== null || (satellitesByHubId.get(site.id)?.length ?? 0) > 0
+            "
+            class="min-w-[260px] text-xs"
+            @update:modelValue="(val: string | null) => onHubChange(site, val)"
+          />
         </div>
       </div>
     </div>

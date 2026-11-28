@@ -12,6 +12,35 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
+    id: '2026-11-28-dispatch-hub-cross-site-dropoff',
+    date: '2026-11-28',
+    milestone: '4. Mérföldkő',
+    category: 'feature',
+    title: 'Összekapcsolt épületek (Közös csomagoló központ) és cross-site lerakás',
+    summary:
+      'Az egymás melletti épületek (pl. Főraktár + szomszédos Bolt) közös kiszállítási központba kapcsolhatók, és a kiszedett áru bármely elérhető telephely csomagolópolcára leadható.',
+    items: [
+      'Közös kiszállítási központ (Hub) beállítása a Vezérlőpulton — a központ és a kapcsolt bolt közös készlete ON_HOLD nélkül, épületenkénti/zónás kiszedési feladatokkal teljesíthető',
+      'Klaszter-szintű foglalásvédelem a központ és a kapcsolt üzletek között (bolti pultos eladás nem viheti el a webshophoz foglalt utolsó darabot)',
+      'Cross-site lerakás PC-n (/shipments) és PDA-n (/pda/picking): a szomszédos épületben kiszedett termékek a Főraktár lerakópolcaira is csippantva leadhatók',
+      'Lerakó / Csomagoló helyszín (isDropoffLocation) jelölés a lokációknál a gyors polcválasztáshoz',
+    ],
+  },
+  {
+    id: '2026-11-28-pwa-standalone',
+    date: '2026-11-28',
+    milestone: 'Rendszer',
+    category: 'feature',
+    title: 'Telepíthető PWA mód (címsor nélküli PDA-használat)',
+    summary:
+      'Az xStorage mostantól telepíthető alkalmazásként (PWA) is hozzáadható a PDA és telefon kezdőképernyőjéhez, így böngésző címsor nélkül, teljes képernyőn fut.',
+    items: [
+      'Web App Manifest (standalone megjelenítés) és 192×192 / 512×512 alkalmazásikonok',
+      'Minimális Service Worker a telepíthetőséghez, az élő raktári API-hívások megőrzésével',
+      'PDA-barát viewport és görgetés-finomhangolás (véletlen pull-to-refresh tiltása)',
+    ],
+  },
+  {
     id: '2026-11-28-fulfillment-routing',
     date: '2026-11-28',
     milestone: '4. Mérföldkő',

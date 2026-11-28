@@ -10,6 +10,8 @@ export interface LocationItem {
   slotMode?: SlotMode | null
   canFulfillWebshop?: boolean
   fulfillmentPriority?: number
+  dispatchHubLocationId?: string | null
+  isDropoffLocation?: boolean
   isActive: boolean
   isAssigned?: boolean
   createdAt: string
@@ -59,6 +61,8 @@ export const locationApi = {
     isActive?: boolean
     canFulfillWebshop?: boolean
     fulfillmentPriority?: number
+    dispatchHubLocationId?: string | null
+    isDropoffLocation?: boolean
   }) => apiClient.post<LocationItem>('/locations', data),
   bulkCreate: (data: BulkCreateLocationsPayload) =>
     apiClient.post<BulkCreateLocationsResult>('/locations/bulk', data),
@@ -72,6 +76,8 @@ export const locationApi = {
       isActive?: boolean
       canFulfillWebshop?: boolean
       fulfillmentPriority?: number
+      dispatchHubLocationId?: string | null
+      isDropoffLocation?: boolean
     },
   ) => apiClient.patch<LocationItem>(`/locations/${id}`, data),
   remove: (id: string) => apiClient.delete(`/locations/${id}`),

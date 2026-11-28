@@ -133,6 +133,8 @@ export interface Location {
     slotMode?: SlotMode;
     canFulfillWebshop?: boolean;
     fulfillmentPriority?: number;
+    dispatchHubLocationId?: string | null;
+    isDropoffLocation?: boolean;
 
     createdAt: string;
     updatedAt: string;

@@ -54,7 +54,9 @@ interface DropoffShelfOption {
   id: string
   name: string
   pathLabel: string
+  siteName: string
   typeLabel: string
+  isDropoff: boolean
   slotModeLabel: string | null
   slotModeBadgeClass: string | null
   searchText: string
@@ -307,8 +309,54 @@ function isDescendantOrSelf(locationId: string, rootId: string): boolean {
   return false
 }
 
-function getDropoffOptionsForSite(sourceLocationId: string): DropoffShelfOption[] {
+function getRootSiteIdForLocation(locationId: string): string | null {
   const map = locationsById.value
+  const visited = new Set<string>()
+  let current = map.get(locationId)
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id)
+    if (current.type === LocationType.WAREHOUSE || current.type === LocationType.STORE) {
+      return current.id
+    }
+    current = current.parentId ? map.get(current.parentId) : undefined
+  }
+  return null
+}
+
+function isLocationOrAncestorDropoff(locationId: string): boolean {
+  const map = locationsById.value
+  const visited = new Set<string>()
+  let current = map.get(locationId)
+  while (current && !visited.has(current.id)) {
+    if (current.isDropoffLocation) return true
+    visited.add(current.id)
+    current = current.parentId ? map.get(current.parentId) : undefined
+  }
+  return false
+}
+
+function buildShelfOption(loc: LocationItem): DropoffShelfOption {
+  const map = locationsById.value
+  const path = getLocationPath(loc.id, map)
+  const pathLabel = path.map((node) => node.name).join(' › ')
+  const siteName = path[0]?.name ?? ''
+  const typeMeta = LOCATION_TYPE_META[loc.type]
+  const slotMeta = loc.slotMode ? SLOT_MODE_META[loc.slotMode] : null
+  const isDropoff = isLocationOrAncestorDropoff(loc.id)
+  return {
+    id: loc.id,
+    name: loc.name,
+    pathLabel,
+    siteName,
+    typeLabel: typeMeta.label,
+    isDropoff,
+    slotModeLabel: slotMeta?.shortLabel ?? null,
+    slotModeBadgeClass: slotMeta?.badgeClass ?? null,
+    searchText: `${loc.name} ${pathLabel} ${siteName} ${loc.id} ${isDropoff ? 'lerako csomagolo' : ''}`.toLowerCase(),
+  }
+}
+
+function getDropoffOptionsForSite(sourceLocationId: string): DropoffShelfOption[] {
   const typeOrder: Record<LocationType, number> = {
     [LocationType.BIN]: 0,
     [LocationType.SHELF]: 1,
@@ -324,21 +372,50 @@ function getDropoffOptionsForSite(sourceLocationId: string): DropoffShelfOption[
       if (orderDiff !== 0) return orderDiff
       return a.name.localeCompare(b.name, 'hu', { numeric: true })
     })
+    .map(buildShelfOption)
+}
+
+function getDropoffOptionsForTask(task: PickTaskRouteTask): DropoffShelfOption[] {
+  const typeOrder: Record<LocationType, number> = {
+    [LocationType.BIN]: 0,
+    [LocationType.SHELF]: 1,
+    [LocationType.ZONE]: 2,
+    [LocationType.WAREHOUSE]: 3,
+    [LocationType.STORE]: 3,
+  }
+
+  const taskSite = locationsById.value.get(task.sourceLocationId)
+  const preferredHubId =
+    task.sourceLocation.dispatchHubLocationId ??
+    taskSite?.dispatchHubLocationId ??
+    task.sourceLocationId
+
+  return allLocations.value
+    .filter(
+      (loc) =>
+        loc.isActive &&
+        loc.isAssigned !== false &&
+        loc.type !== LocationType.WAREHOUSE &&
+        loc.type !== LocationType.STORE,
+    )
     .map((loc) => {
-      const path = getLocationPath(loc.id, map)
-      const pathLabel = path.map((node) => node.name).join(' › ')
-      const typeMeta = LOCATION_TYPE_META[loc.type]
-      const slotMeta = loc.slotMode ? SLOT_MODE_META[loc.slotMode] : null
-      return {
-        id: loc.id,
-        name: loc.name,
-        pathLabel,
-        typeLabel: typeMeta.label,
-        slotModeLabel: slotMeta?.shortLabel ?? null,
-        slotModeBadgeClass: slotMeta?.badgeClass ?? null,
-        searchText: `${loc.name} ${pathLabel} ${loc.id}`.toLowerCase(),
-      }
+      const option = buildShelfOption(loc)
+      const rootId = getRootSiteIdForLocation(loc.id)
+      const isPreferredHub = rootId === preferredHubId
+      return { loc, option, isPreferredHub }
     })
+    .sort((a, b) => {
+      if (a.option.isDropoff !== b.option.isDropoff) {
+        return a.option.isDropoff ? -1 : 1
+      }
+      if (a.isPreferredHub !== b.isPreferredHub) {
+        return a.isPreferredHub ? -1 : 1
+      }
+      const orderDiff = typeOrder[a.loc.type] - typeOrder[b.loc.type]
+      if (orderDiff !== 0) return orderDiff
+      return a.option.pathLabel.localeCompare(b.option.pathLabel, 'hu', { numeric: true })
+    })
+    .map((entry) => entry.option)
 }
 
 // Offline sor nézetek
@@ -2347,12 +2424,9 @@ onBeforeUnmount(() => {
                 </span>
               </div>
 
-              <p
-                v-if="!selectedSiteId && assignedSites.length > 1"
-                class="text-[11px] text-slate-500 flex items-center gap-1 truncate"
-              >
-                <i class="pi pi-map-marker text-[10px] text-slate-400"></i>
-                <span class="truncate">{{ task.sourceLocation.name }}</span>
+              <p class="text-[11px] text-slate-600 flex items-center gap-1 truncate">
+                <i class="pi pi-building text-[10px] text-slate-400"></i>
+                <span class="font-semibold truncate">{{ task.sourceLocation.name }}</span>
               </p>
             </div>
           </div>
@@ -2708,8 +2782,13 @@ onBeforeUnmount(() => {
             </span>
           </div>
 
-          <!-- Rendelésszám + Kocsi/Láda jelvény (párhuzamos szedésnél kritikus!) -->
+          <!-- Rendelésszám + Épület + Kocsi/Láda jelvény (párhuzamos szedésnél kritikus!) -->
           <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200 text-[11px] font-bold">
+              <i class="pi pi-building text-[10px] text-slate-500"></i>
+              {{ item.sourceLocationName }}
+            </span>
+
             <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-900 border border-blue-200 text-xs font-extrabold">
               <i class="pi pi-file text-[10px]"></i>
               {{ item.orderNumber }}
@@ -3166,24 +3245,32 @@ onBeforeUnmount(() => {
               </button>
             </div>
 
-            <!-- Opcionális telephelyi polcválasztó -->
+            <!-- Opcionális telephelyi / központi lerakópolc választó (cross-site is!) -->
             <Select
-              v-if="getDropoffOptionsForSite(task.sourceLocationId).length > 0"
+              v-if="getDropoffOptionsForTask(task).length > 0"
               :modelValue="dropoffLocationIdByTask[task.id] ?? null"
-              :options="getDropoffOptionsForSite(task.sourceLocationId)"
+              :options="getDropoffOptionsForTask(task)"
               optionLabel="pathLabel"
               optionValue="id"
               filter
-              :filterFields="['name', 'pathLabel', 'typeLabel', 'searchText']"
+              :filterFields="['name', 'pathLabel', 'siteName', 'typeLabel', 'searchText']"
               showClear
-              placeholder="Vagy válassz telephelyi lerakópolcot..."
+              placeholder="Vagy válassz lerakópolcot (bármely elérhető épület)..."
               class="w-full"
               @update:modelValue="(val: string | null) => setTaskDropoffLocation(task.id, val)"
             >
-              <template #option="{ option }">
+              <template #option="{ option }: { option: DropoffShelfOption }">
                 <div class="flex items-center justify-between gap-2 w-full py-0.5">
                   <div class="min-w-0">
-                    <p class="text-xs font-bold text-slate-900 truncate">{{ option.name }}</p>
+                    <div class="flex items-center gap-1.5">
+                      <p class="text-xs font-bold text-slate-900 truncate">{{ option.name }}</p>
+                      <span
+                        v-if="option.isDropoff"
+                        class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-extrabold uppercase shrink-0"
+                      >
+                        Lerakó
+                      </span>
+                    </div>
                     <p class="text-[11px] text-slate-500 truncate">{{ option.pathLabel }}</p>
                   </div>
                   <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-semibold shrink-0">
