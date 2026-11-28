@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateIf } from "class-validator";
 import { LocationType, SlotMode } from "../../generated/prisma/enums";
 
 
@@ -27,5 +27,24 @@ export class CreateLocationDto {
 
     @IsOptional()
     @IsBoolean()
-    isActive?: boolean; 
+    isActive?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    canFulfillWebshop?: boolean;
+
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(9999)
+    fulfillmentPriority?: number;
+
+    @IsOptional()
+    @ValidateIf((_, value) => value !== null && value !== undefined)
+    @IsUUID()
+    dispatchHubLocationId?: string | null;
+
+    @IsOptional()
+    @IsBoolean()
+    isDropoffLocation?: boolean;
 }

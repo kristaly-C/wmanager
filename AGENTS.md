@@ -7,6 +7,7 @@
   - **Architektúra, tervezés, koordináció, összetett üzleti logika és séma-tervezés:** **Gemini 4 Neon** (`gemini-4-neon-xhigh`)
   - **Egyszerűbb részfeladatok, UI komponensek és CRUD űrlapok:** **Gemini 4 Hydrogen** (`gemini-4-hydrogen-high` / `medium`)
   - **Tesztfuttatás, build/lint ellenőrzés (`verifier`), `monitor` és rutin feladatok:** **Gemini 3.8 Flash** (`gemini-3.8-flash-high` / `medium`)
+- **Frissítési napló karbantartása (KÖTELEZŐ):** Minden lezárt új funkció, érdemi fejlesztés vagy felhasználót érintő hibajavítás végén **kötelező** felvenni egy új, rövid, közérthető magyar összefoglalót a `apps/frontend/src/data/changelog.ts` fájl (`CHANGELOG_ENTRIES`) **tetejére** (egyedi `id`, aktuális `date`, `milestone`, `category`, `title`, `summary`, `items`).
 
 ## 1. Architektúra és monorepo szabályok
 - **Szerkezet:** npm workspaces monorepo (`apps/backend` NestJS + Prisma 7, `apps/frontend` Vue 3 + PrimeVue + Tailwind, `packages/shared-types` közös TS típusok).

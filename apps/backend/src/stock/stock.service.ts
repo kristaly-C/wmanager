@@ -15,6 +15,11 @@ import {
     getBarcodeSearchVariants,
 } from "../common/barcode-search";
 import { canSeeCostPrice, excludeCostPrice, excludeUnitCostHuf } from "../common/cost-price";
+import {
+    acquireSiteVariantLocks,
+    assertSiteStockCanDecrease,
+    resolveRootSiteLocationId,
+} from "../common/sales-reservation";
 
 const INITIAL_STOCK_SETTING_KEY = 'initialStockEnabled';
 const MANAGER_ROLES: readonly Role[] = [
@@ -290,6 +295,15 @@ export class StockService {
                 }
             }
 
+            if (dto.quantityChange < 0) {
+                await assertSiteStockCanDecrease(
+                    tx,
+                    dto.locationId,
+                    dto.variantId,
+                    Math.abs(dto.quantityChange),
+                );
+            }
+
             const existing = await tx.stockItem.findUnique({
                 where: {
                     variantId_locationId: {
@@ -407,6 +421,18 @@ export class StockService {
         const movementNote = dto.note?.trim() || `Áthelyezés: ${fromLoc.name} → ${toLoc.name}`;
 
         return this.prisma.$transaction(async (tx) => {
+            const fromRoot = await resolveRootSiteLocationId(tx, dto.fromLocationId);
+            const toRoot = await resolveRootSiteLocationId(tx, dto.toLocationId);
+
+            if (fromRoot !== toRoot) {
+                await assertSiteStockCanDecrease(
+                    tx,
+                    dto.fromLocationId,
+                    dto.variantId,
+                    dto.quantity,
+                );
+            }
+
             const sourceStock = await tx.stockItem.findUnique({
                 where: {
                     variantId_locationId: {
@@ -615,6 +641,9 @@ export class StockService {
                 throw new BadRequestException('Ez a jelentés már el lett bírálva');
             }
 
+            const siteLocationId = await resolveRootSiteLocationId(tx, report.locationId);
+            await acquireSiteVariantLocks(tx, [{ siteLocationId, variantId: report.variantId }]);
+
             const existingStock = await tx.stockItem.findUnique({
                 where: {
                     variantId_locationId: {
@@ -626,6 +655,17 @@ export class StockService {
 
             const currentQty = existingStock?.quantity ?? 0;
             const newQty = report.foundQuantity;
+            const delta = newQty - currentQty;
+
+            if (delta < 0) {
+                await assertSiteStockCanDecrease(
+                    tx,
+                    existingReport.locationId,
+                    existingReport.variantId,
+                    Math.abs(delta),
+                );
+            }
+
             const clampedReserved = existingStock
                 ? Math.min(existingStock.reservedQuantity, newQty)
                 : 0;
@@ -649,7 +689,6 @@ export class StockService {
                 },
             });
 
-            const delta = newQty - currentQty;
             if (delta !== 0) {
                 const variant = await tx.variant.findUnique({
                     where: { id: report.variantId },

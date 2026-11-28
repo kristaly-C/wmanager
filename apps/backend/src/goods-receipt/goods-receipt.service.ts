@@ -18,6 +18,7 @@ import {
     excludeCostPrice,
     excludeUnitCostHuf,
 } from '../common/cost-price';
+import { assertSiteStockCanDecrease } from '../common/sales-reservation';
 import {
     GoodsReceiptStatus,
     MovementType,
@@ -714,6 +715,13 @@ export class GoodsReceiptService {
             if (!currentMovement || currentMovement.reversedBy) {
                 throw new ConflictException('Ezt az elrakási tételt már sztornózták');
             }
+
+            await assertSiteStockCanDecrease(
+                tx,
+                currentMovement.locationId,
+                currentMovement.variantId,
+                currentMovement.quantity,
+            );
 
             const stockItem = await tx.stockItem.findUnique({
                 where: {

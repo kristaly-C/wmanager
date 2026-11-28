@@ -4,8 +4,12 @@ import { useAuthStore } from '@/stores/auth'
 import Button from 'primevue/button'
 import {ref} from 'vue'
 import MyQrBadgeModal from '@/components/common/MyQrBadgeModal.vue'
+import WhatsNewModal from '@/components/common/WhatsNewModal.vue'
+import { useChangelog } from '@/composables/useChangelog'
 
 const isQrModalOpen = ref(false)
+const isWhatsNewOpen = ref(false)
+const { hasUnread, unreadCount } = useChangelog()
 const authStore = useAuthStore()
 const router = useRouter()
 
@@ -40,6 +44,22 @@ function handleLogout() {
         </div>
 
         <div class="flex items-center gap-1">
+          <span class="relative inline-flex">
+            <Button
+              icon="pi pi-sparkles"
+              severity="secondary"
+              text
+              rounded
+              size="small"
+              :title="hasUnread ? `Újdonságok (${unreadCount} új frissítés)` : 'Újdonságok és frissítések'"
+              :aria-label="hasUnread ? `Újdonságok (${unreadCount} új frissítés)` : 'Újdonságok és frissítések'"
+              @click="isWhatsNewOpen = true"
+            />
+            <span
+              v-if="hasUnread"
+              class="pointer-events-none absolute top-1 right-1 w-2 h-2 rounded-full bg-orange-500 ring-2 ring-white"
+            ></span>
+          </span>
           <Button
             v-if="authStore.user?.role !== 'ADMIN' && authStore.user?.role !== 'BOSS'"
             icon="pi pi-qrcode"
@@ -77,6 +97,7 @@ function handleLogout() {
       </main>
 
       <MyQrBadgeModal v-model:visible="isQrModalOpen" />
+      <WhatsNewModal v-model:visible="isWhatsNewOpen" />
     </div>
   </div>
 </template>

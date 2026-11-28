@@ -25,3 +25,11 @@ app.use(PrimeVue, {
 app.use(ToastService)
 app.use(ConfirmationService)
 app.mount('#app')
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Nem kritikus hiba, ha a böngésző környezet nem támogatja a Service Workert
+    })
+  })
+}

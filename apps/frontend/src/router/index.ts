@@ -115,6 +115,22 @@ const router = createRouter({
           },
         },
         {
+          path: 'orders',
+          name: 'orders',
+          component: () => import('@/views/OrdersView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.ORDER_CLERK,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+            ],
+          },
+        },
+        {
           path: 'shipments',
           name: 'shipments',
           component: () => import('@/views/ShipmentsView.vue'),
@@ -183,6 +199,21 @@ const router = createRouter({
           path: 'receiving/:id',
           name: 'pda-putaway',
           component: () => import('@/views/PdaPutawayView.vue'),
+          meta: {
+            allowedRoles: [
+              Role.ADMIN,
+              Role.BOSS,
+              Role.WAREHOUSE_MANAGER,
+              Role.STORE_MANAGER,
+              Role.WAREHOUSE_STAFF,
+              Role.STORE_STAFF,
+            ],
+          },
+        },
+        {
+          path: 'picking',
+          name: 'pda-picking',
+          component: () => import('@/views/PdaPickingView.vue'),
           meta: {
             allowedRoles: [
               Role.ADMIN,

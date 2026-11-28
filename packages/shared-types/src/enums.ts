@@ -67,7 +67,25 @@ export enum LocationType {
     DECLINED = 'DECLINED',
   }
   export enum SalesOrderStatus {
+    ON_HOLD = 'ON_HOLD',
     PENDING = 'PENDING',
+    PICKING = 'PICKING',
+    READY = 'READY',
+    COMPLETED = 'COMPLETED',
+    CANCELLED = 'CANCELLED',
+  }
+
+  export enum SalesChannel {
+    WEBSHOP = 'WEBSHOP',
+    STORE = 'STORE',
+    PHONE = 'PHONE',
+    B2B = 'B2B',
+  }
+
+  export enum PickTaskStatus {
+    OPEN = 'OPEN',
+    IN_PROGRESS = 'IN_PROGRESS',
+    AWAITING_DROP = 'AWAITING_DROP',
     COMPLETED = 'COMPLETED',
     CANCELLED = 'CANCELLED',
   }

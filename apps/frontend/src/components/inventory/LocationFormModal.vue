@@ -36,6 +36,7 @@ const form = ref({
   type: LocationType.WAREHOUSE as LocationType,
   parentId: null as string | null,
   slotMode: null as SlotMode | null,
+  isDropoffLocation: false,
   isActive: true,
 })
 
@@ -89,6 +90,7 @@ watch(
         type: props.editingLocation.type,
         parentId: props.editingLocation.parentId,
         slotMode: props.editingLocation.slotMode ?? null,
+        isDropoffLocation: props.editingLocation.isDropoffLocation ?? false,
         isActive: props.editingLocation.isActive,
       }
     } else {
@@ -98,6 +100,7 @@ watch(
         type: props.initialType,
         parentId: props.initialParentId,
         slotMode: null,
+        isDropoffLocation: false,
         isActive: true,
       }
     }
@@ -140,6 +143,7 @@ async function handleSubmit() {
         type: form.value.type,
         parentId: requiresParent.value ? (form.value.parentId ?? undefined) : undefined,
         slotMode: showSlotMode.value && form.value.slotMode ? form.value.slotMode : undefined,
+        isDropoffLocation: showSlotMode.value ? form.value.isDropoffLocation : undefined,
         isActive: form.value.isActive,
       })
       saved = res.data
@@ -156,6 +160,7 @@ async function handleSubmit() {
         description: form.value.description.trim() || null,
         parentId: requiresParent.value ? form.value.parentId : undefined,
         slotMode: showSlotMode.value ? form.value.slotMode : undefined,
+        isDropoffLocation: showSlotMode.value ? form.value.isDropoffLocation : undefined,
         isActive: form.value.isActive,
       })
       saved = res.data
@@ -323,6 +328,24 @@ async function handleSubmit() {
           {{ SLOT_MODE_META[form.slotMode].description }}
         </p>
       </div>
+
+      <!-- Lerakó / Csomagoló helyszín jelölés (csak ZONE / SHELF / BIN) -->
+      <label
+        v-if="showSlotMode"
+        class="flex items-center justify-between bg-violet-50/70 border border-violet-200 rounded-[12px] px-3.5 py-2.5 cursor-pointer"
+      >
+        <div>
+          <p class="text-xs font-semibold text-violet-950">Lerakó / Csomagoló helyszín (Dropoff)</p>
+          <p class="text-[11px] text-violet-800">
+            Kiszedés után ide gyűjthetők a rendelések (PDA &amp; PC lerakás listában kiemelve).
+          </p>
+        </div>
+        <input
+          v-model="form.isDropoffLocation"
+          type="checkbox"
+          class="size-4 accent-violet-600 cursor-pointer"
+        />
+      </label>
 
       <!-- Aktív státusz -->
       <label class="flex items-center justify-between bg-[#f6f7f5] border border-[#e8eae6] rounded-[12px] px-3.5 py-2.5 cursor-pointer">
